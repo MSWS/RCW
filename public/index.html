@@ -681,7 +681,7 @@
       var p = (s.read / s.total * 100).toFixed(1);
       document.getElementById('stats-row').innerHTML =
         '<span><span class="stat-val stat-read">' + s.read.toLocaleString() + '</span> read</span>' +
-        '<span><span class="stat-val stat-skip">' + s.skipped.toLocaleString() + '</span> skipped</span>' +
+        (s.skipped > 0 ? '<span><span class="stat-val stat-skip">' + s.skipped.toLocaleString() + '</span> skipped</span>' : '') +
         '<span>' + s.unread.toLocaleString() + ' unread</span>' +
         '<span>' + s.total.toLocaleString() + ' total</span>' +
         '<span class="stat-val stat-pct">' + p + '% complete</span>';
@@ -808,7 +808,7 @@
           '<div class="row-label">Title ' + t.rcwTitle + '</div>' +
           '<div class="row-meta">' +
           '<span class="m-read">' + t.read + ' read</span>' +
-          ' · <span class="m-skip">' + t.skipped + ' skipped</span>' +
+          (t.skipped > 0 ? ' · <span class="m-skip">' + t.skipped + ' skipped</span>' : '') +
           ' · ' + t.unread + ' unread' +
           segBar(t.read, t.skipped, t.total, true) +
           '</div>' +
@@ -865,7 +865,7 @@
           '<div class="row-label">Chapter ' + c.chapter + '</div>' +
           '<div class="row-meta">' +
           '<span class="m-read">' + c.read + '</span>' +
-          ' · <span class="m-skip">' + c.skipped + '</span>' +
+          (c.skipped > 0 ? ' · <span class="m-skip">' + c.skipped + '</span>' : '') +
           ' · ' + c.unread + ' unread' +
           segBar(c.read, c.skipped, c.total, true) +
           '</div>' +
