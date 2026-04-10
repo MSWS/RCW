@@ -35,6 +35,16 @@ jobs:
       - name: Build and push Docker image
         run: |
           IMAGE=$(echo "${{ vars.REGISTRY }}/${{ gitea.repository }}" | tr '[:upper:]' '[:lower:]')
-          docker build -t $IMAGE:${{ gitea.sha }} -t $IMAGE:latest .
+          BRANCH="${{ gitea.ref_name }}"
+          if [ "$BRANCH" = "main" ]; then
+            TAG="latest"
+          elif [ "$BRANCH" = "dev" ]; then
+            TAG="dev"
+          else
+            echo "Not on main or dev, skipping push."
+            docker build .
+            exit 0
+          fi
+          docker build -t $IMAGE:${{ gitea.sha }} -t $IMAGE:$TAG .
           docker push $IMAGE:${{ gitea.sha }}
-          docker push $IMAGE:latest
+          docker push $IMAGE:$TAG
