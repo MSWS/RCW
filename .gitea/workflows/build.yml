@@ -25,5 +25,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t rcw-reader:${{ gitea.sha }} .
+      - name: Log in to Gitea container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ gitea.server_url }}
+          username: ${{ gitea.actor }}
+          password: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ gitea.server_url }}/${{ gitea.repository }}:${{ gitea.sha }}
+            ${{ gitea.server_url }}/${{ gitea.repository }}:latest
