@@ -72,7 +72,7 @@ function readerPage(section: SectionRow): string {
   a.rcw-ref { color: #226; text-decoration: underline dotted; position: relative; }
   a.rcw-ref[data-tooltip]:hover::after {
     content: attr(data-tooltip);
-    position: absolute; bottom: calc(100% + 4px); left: 0;
+    position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
     background: #1a1a1a; color: #fff;
     padding: 0.3rem 0.6rem; border-radius: 4px;
     font-size: 0.78rem; line-height: 1.4;
