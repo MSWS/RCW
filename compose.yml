@@ -4,10 +4,16 @@ services:
     volumes:
       - ./rcw:/rcw:ro
       - ./data:/data
+    environment:
+      - RCW_DIR=/rcw
+      - STATE_FILE=/data/rcw_reader_state.json
+      - DB_FILE=/data/rcw.db
+      - PORT=3000
     restart: unless-stopped
     networks:
       - local
       - cloudflared
+
 networks:
   local:
     external: true
