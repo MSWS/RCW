@@ -1,0 +1,26 @@
+name: Build
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'Dockerfile'
+      - 'server.ts'
+      - 'database.ts'
+      - 'public/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'server.ts'
+      - 'database.ts'
+      - 'public/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t rcw-reader:${{ gitea.sha }} .
