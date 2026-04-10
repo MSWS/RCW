@@ -33,10 +33,8 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ vars.REGISTRY }}/${{ gitea.repository }}:${{ gitea.sha }}
-            ${{ vars.REGISTRY }}/${{ gitea.repository }}:latest
+        run: |
+          IMAGE=$(echo "${{ vars.REGISTRY }}/${{ gitea.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE:${{ gitea.sha }} -t $IMAGE:latest .
+          docker push $IMAGE:${{ gitea.sha }}
+          docker push $IMAGE:latest
