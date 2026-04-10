@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RCW — Index</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --border: #e0dbd2;
+  --text: #1c1c1a;
+  --muted: #6b6b65;
+  --accent: #1e4080;
+  --accent-hover: #163060;
+  --accent-tint: #edf1f9;
+  --read-color: #166534;
+  --read-bg: #16a34a;
+  --read-tint: #dcfce7;
+  --read-border: #86efac;
+  --skip-color: #92400e;
+  --skip-bg: #d97706;
+  --skip-tint: #fef3c7;
+  --skip-border: #fcd34d;
+  --unread-bg: #ddd9d0;
+  --radius: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── Nav ── */
+.nav {
+  background: var(--accent);
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  gap: 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.nav-brand {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: white;
+  letter-spacing: 0.02em;
+  margin-right: auto;
+}
+.nav a {
+  color: rgba(255,255,255,0.7);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.3rem 0;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.nav a:hover { color: white; }
+.nav a.active { color: white; border-bottom-color: rgba(255,255,255,0.7); }
+
+/* ── Page ── */
+.page { max-width: 920px; margin: 0 auto; padding: 2rem 1.25rem; }
+
+/* ── Stats card ── */
+.stats-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem 1rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.stats-card h1 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+  margin-bottom: 0.6rem;
+}
+.stats-row {
+  display: flex;
+  gap: 1.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+}
+.stat-val { font-weight: 700; }
+.stat-read { color: var(--read-color); }
+.stat-skip { color: var(--skip-color); }
+.stat-pct { color: var(--accent); }
+
+/* ── Segmented progress bar ── */
+.seg-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--unread-bg);
+  overflow: hidden;
+  display: flex;
+}
+.seg-bar.sm { height: 4px; margin-top: 5px; }
+.seg-read { background: var(--read-bg); transition: width 0.4s ease; }
+.seg-skip { background: var(--skip-bg); transition: width 0.4s ease; }
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  padding: 0.28rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: all 0.15s;
+  letter-spacing: 0.01em;
+}
+.filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+.filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.search-wrap { margin-left: auto; position: relative; }
+.search-wrap input {
+  padding: 0.3rem 0.85rem 0.3rem 2.1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.8rem;
+  width: 230px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  color: var(--text);
+}
+.search-wrap input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(30,64,128,0.1);
+}
+.search-icon {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+/* ── TOC shell ── */
+.toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+/* ── Title rows ── */
+.title-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem 0.85rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  user-select: none;
+}
+.title-row:last-child { border-bottom: none; }
+.title-row:hover { background: #f0ede6; }
+.title-row.open { background: var(--accent-tint); border-bottom-color: #c5d3ec; }
+
+.chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.6rem;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.15s;
+}
+.title-row.open .chevron,
+.chapter-row.open .chevron { transform: rotate(90deg); color: var(--accent); }
+
+.row-main { min-width: 0; }
+.row-label { font-weight: 600; font-size: 0.88rem; }
+.title-row.open .row-label { color: var(--accent); }
+
+.row-meta { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
+.m-read { color: var(--read-color); font-weight: 600; }
+.m-skip { color: var(--skip-color); font-weight: 600; }
+
+.row-right { text-align: right; flex-shrink: 0; }
+.pct-label { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+.title-row.open .pct-label { color: var(--accent); }
+
+/* ── Chapter container ── */
+.chapter-container { display: none; border-top: 1px solid var(--border); }
+.chapter-container.open { display: block; }
+
+/* ── Chapter rows ── */
+.chapter-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem 0.6rem 2rem;
+  cursor: pointer;
+  border-bottom: 1px solid #ede9e0;
+  background: #faf9f6;
+  transition: background 0.1s;
+  user-select: none;
+}
+.chapter-row:last-child { border-bottom: none; }
+.chapter-row:hover { background: #f2efe8; }
+.chapter-row.open { background: #edeae3; }
+.chapter-row .row-label { font-weight: 500; font-size: 0.83rem; }
+
+/* ── Section container ── */
+.section-container { display: none; border-top: 1px solid #e8e4db; }
+.section-container.open { display: block; }
+
+/* ── Section rows ── */
+.section-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.38rem 1rem 0.38rem 3.25rem;
+  border-bottom: 1px solid #edeae3;
+  background: #f7f5f1;
+  transition: background 0.1s;
+}
+.section-row:last-child { border-bottom: none; }
+.section-row:hover { background: #efece5; }
+
+.section-cite {
+  flex: 1;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-family: 'SF Mono', 'Fira Mono', 'Cascadia Code', monospace;
+  letter-spacing: 0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.section-cite:hover { text-decoration: underline; }
+
+/* ── Status badge ── */
+.badge {
+  flex-shrink: 0;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  letter-spacing: 0.03em;
+  transition: transform 0.1s, filter 0.1s;
+  user-select: none;
+}
+.badge:hover { transform: scale(1.07); filter: brightness(0.94); }
+.badge.read { background: var(--read-tint); color: var(--read-color); border-color: var(--read-border); }
+.badge.skipped { background: var(--skip-tint); color: var(--skip-color); border-color: var(--skip-border); }
+.badge.unread { background: #f0ede8; color: var(--muted); border-color: var(--border); }
+
+/* ── Misc ── */
+.loading-msg { padding: 1.5rem; text-align: center; color: var(--muted); font-size: 0.85rem; }
+.empty-msg { padding: 2.5rem; text-align: center; color: var(--muted); font-size: 0.88rem; display: none; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="nav-brand">RCW</span>
+  <a href="/">Reader</a>
+  <a href="/index" class="active">Index</a>
+</nav>
+
+<div class="page">
+
+  <div class="stats-card">
+    <h1>Revised Code of Washington</h1>
+    <div class="stats-row" id="stats-row">
+      <span>Loading…</span>
+    </div>
+    <div class="seg-bar" id="overall-bar">
+      <div class="seg-read" style="width:0%"></div>
+      <div class="seg-skip" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="unread">Unread</button>
+    <button class="filter-btn" data-filter="read">Read</button>
+    <button class="filter-btn" data-filter="skipped">Skipped</button>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="search" id="search" placeholder="Search by cite…" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="toc" id="toc">
+    <div class="loading-msg">Loading…</div>
+  </div>
+  <div class="empty-msg" id="empty">No results match the current filter.</div>
+
+</div>
+
+<script>
+var currentFilter = 'all';
+var currentSearch = '';
+var openTitles = new Set();
+var openChapters = new Set();
+
+function segBar(read, skipped, total, sm) {
+  var rp = total > 0 ? (read / total * 100).toFixed(2) : 0;
+  var sp = total > 0 ? (skipped / total * 100).toFixed(2) : 0;
+  var cls = sm ? 'seg-bar sm' : 'seg-bar';
+  return '<div class="' + cls + '">' +
+    '<div class="seg-read" style="width:' + rp + '%"></div>' +
+    '<div class="seg-skip" style="width:' + sp + '%"></div>' +
+    '</div>';
+}
+
+function pct(read, total) {
+  if (total === 0) return '0%';
+  return (read / total * 100).toFixed(1) + '%';
+}
+
+function badgeHTML(status) {
+  if (status === 'read') return '<span class="badge read">✓ read</span>';
+  if (status === 'skipped') return '<span class="badge skipped">→ skipped</span>';
+  return '<span class="badge unread">○ unread</span>';
+}
+
+function nextStatus(s) {
+  return s === 'unread' ? 'read' : s === 'read' ? 'skipped' : 'unread';
+}
+
+async function setStatus(cite, status) {
+  await fetch('/set-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cite: cite, status: status })
+  });
+}
+
+// ── Stats ──────────────────────────────────────────────
+async function loadStats() {
+  var res = await fetch('/api/stats');
+  var s = await res.json();
+  var p = (s.read / s.total * 100).toFixed(1);
+  document.getElementById('stats-row').innerHTML =
+    '<span><span class="stat-val stat-read">' + s.read.toLocaleString() + '</span> read</span>' +
+    '<span><span class="stat-val stat-skip">' + s.skipped.toLocaleString() + '</span> skipped</span>' +
+    '<span>' + s.unread.toLocaleString() + ' unread</span>' +
+    '<span>' + s.total.toLocaleString() + ' total</span>' +
+    '<span class="stat-val stat-pct">' + p + '% complete</span>';
+  var bar = document.getElementById('overall-bar');
+  bar.querySelector('.seg-read').style.width = (s.read / s.total * 100) + '%';
+  bar.querySelector('.seg-skip').style.width = (s.skipped / s.total * 100) + '%';
+}
+
+// ── TOC ────────────────────────────────────────────────
+async function loadToc() {
+  var toc = document.getElementById('toc');
+  toc.innerHTML = '<div class="loading-msg">Loading…</div>';
+
+  var params = new URLSearchParams({ filter: currentFilter, search: currentSearch });
+  var res = await fetch('/api/toc?' + params);
+  var titles = await res.json();
+
+  var empty = document.getElementById('empty');
+  toc.innerHTML = '';
+
+  if (titles.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  titles.forEach(function(t) {
+    var isOpen = openTitles.has(t.title);
+    var p = pct(t.read, t.total);
+
+    var wrap = document.createElement('div');
+
+    // Title row
+    var row = document.createElement('div');
+    row.className = 'title-row' + (isOpen ? ' open' : '');
+    row.innerHTML =
+      '<div class="chevron">▶</div>' +
+      '<div class="row-main">' +
+        '<div class="row-label">Title ' + t.title + '</div>' +
+        '<div class="row-meta">' +
+          '<span class="m-read">' + t.read + ' read</span>' +
+          ' · <span class="m-skip">' + t.skipped + ' skipped</span>' +
+          ' · ' + t.unread + ' unread' +
+          segBar(t.read, t.skipped, t.total, true) +
+        '</div>' +
+      '</div>' +
+      '<div class="row-right"><div class="pct-label">' + p + '</div></div>';
+
+    // Chapter container
+    var chCon = document.createElement('div');
+    chCon.className = 'chapter-container' + (isOpen ? ' open' : '');
+
+    if (isOpen) renderChapters(chCon, t.title);
+
+    row.addEventListener('click', function() {
+      if (openTitles.has(t.title)) {
+        openTitles.delete(t.title);
+        row.classList.remove('open');
+        chCon.classList.remove('open');
+      } else {
+        openTitles.add(t.title);
+        row.classList.add('open');
+        chCon.classList.add('open');
+        renderChapters(chCon, t.title);
+      }
+    });
+
+    wrap.appendChild(row);
+    wrap.appendChild(chCon);
+    toc.appendChild(wrap);
+  });
+}
+
+async function renderChapters(container, title) {
+  var cacheKey = currentFilter + '|' + currentSearch;
+  if (container.dataset.loaded === cacheKey) return;
+  container.innerHTML = '<div class="loading-msg">Loading chapters…</div>';
+
+  var params = new URLSearchParams({ filter: currentFilter, search: currentSearch });
+  var res = await fetch('/api/toc/' + encodeURIComponent(title) + '?' + params);
+  var chapters = await res.json();
+  container.dataset.loaded = cacheKey;
+  container.innerHTML = '';
+
+  chapters.forEach(function(c) {
+    var chKey = title + '/' + c.chapter;
+    var isOpen = openChapters.has(chKey);
+    var p = pct(c.read, c.total);
+
+    var wrap = document.createElement('div');
+
+    var row = document.createElement('div');
+    row.className = 'chapter-row' + (isOpen ? ' open' : '');
+    row.innerHTML =
+      '<div class="chevron">▶</div>' +
+      '<div class="row-main">' +
+        '<div class="row-label">Chapter ' + c.chapter + '</div>' +
+        '<div class="row-meta">' +
+          '<span class="m-read">' + c.read + '</span>' +
+          ' · <span class="m-skip">' + c.skipped + '</span>' +
+          ' · ' + c.unread + ' unread' +
+          segBar(c.read, c.skipped, c.total, true) +
+        '</div>' +
+      '</div>' +
+      '<div class="row-right"><div class="pct-label">' + p + '</div></div>';
+
+    var secCon = document.createElement('div');
+    secCon.className = 'section-container' + (isOpen ? ' open' : '');
+
+    if (isOpen) renderSections(secCon, title, c.chapter);
+
+    row.addEventListener('click', function() {
+      if (openChapters.has(chKey)) {
+        openChapters.delete(chKey);
+        row.classList.remove('open');
+        secCon.classList.remove('open');
+      } else {
+        openChapters.add(chKey);
+        row.classList.add('open');
+        secCon.classList.add('open');
+        renderSections(secCon, title, c.chapter);
+      }
+    });
+
+    wrap.appendChild(row);
+    wrap.appendChild(secCon);
+    container.appendChild(wrap);
+  });
+}
+
+async function renderSections(container, title, chapter) {
+  var cacheKey = currentFilter + '|' + currentSearch;
+  if (container.dataset.loaded === cacheKey) return;
+  container.innerHTML = '<div class="loading-msg">Loading sections…</div>';
+
+  var params = new URLSearchParams({ filter: currentFilter, search: currentSearch });
+  var res = await fetch(
+    '/api/toc/' + encodeURIComponent(title) + '/' + encodeURIComponent(chapter) + '?' + params
+  );
+  var sections = await res.json();
+  container.dataset.loaded = cacheKey;
+  container.innerHTML = '';
+
+  sections.forEach(function(pair) {
+    var cite = pair[0];
+    var status = pair[1];
+    var name = cite.split('/').pop();
+
+    var row = document.createElement('div');
+    row.className = 'section-row';
+
+    var link = document.createElement('a');
+    link.className = 'section-cite';
+    link.href = '/section?cite=' + encodeURIComponent(cite);
+    link.textContent = name;
+    link.title = cite;
+
+    var badgeWrap = document.createElement('span');
+    badgeWrap.innerHTML = badgeHTML(status);
+    var badge = badgeWrap.firstChild;
+    badge.title = 'Click to cycle status';
+
+    badge.addEventListener('click', async function(e) {
+      e.preventDefault();
+      var next = nextStatus(status);
+      await setStatus(cite, next);
+      status = next;
+      badgeWrap.innerHTML = badgeHTML(status);
+      badge = badgeWrap.firstChild;
+      badge.title = 'Click to cycle status';
+      badge.addEventListener('click', arguments.callee);
+      loadStats();
+    });
+
+    row.appendChild(link);
+    row.appendChild(badgeWrap);
+    container.appendChild(row);
+  });
+}
+
+// ── Wire up controls ───────────────────────────────────
+document.querySelectorAll('.filter-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    document.querySelectorAll('[data-loaded]').forEach(function(el) { el.removeAttribute('data-loaded'); });
+    loadToc();
+  });
+});
+
+var searchTimer;
+document.getElementById('search').addEventListener('input', function(e) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(function() {
+    currentSearch = e.target.value;
+    document.querySelectorAll('[data-loaded]').forEach(function(el) { el.removeAttribute('data-loaded'); });
+    loadToc();
+  }, 300);
+});
+
+loadStats();
+loadToc();
+</script>
+</body>
+</html>

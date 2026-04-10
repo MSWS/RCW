@@ -1,0 +1,15 @@
+services:
+  rcw-reader:
+    build: .
+    volumes:
+      - ./rcw:/rcw:ro
+      - ./data:/data
+    restart: unless-stopped
+    networks:
+      - local
+      - cloudflared
+networks:
+  local:
+    external: true
+  cloudflared:
+    external: true
