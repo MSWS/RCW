@@ -2,6 +2,12 @@
 
 A personal reading tracker for the [Revised Code of Washington](https://app.leg.wa.gov/RCW/). Scrape the full text of the RCW, then read through it section by section with progress tracking and full-text search.
 
+---
+
+> **AI-generated codebase.** The vast majority of this project's code was written by [Claude](https://claude.ai) (Anthropic). The human author directed the design, reviewed the output, and made targeted edits — but most lines were produced by an AI assistant. Treat it accordingly.
+
+---
+
 ## Overview
 
 The project has two parts:
