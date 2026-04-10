@@ -9,6 +9,7 @@ on:
       - 'server.ts'
       - 'database.ts'
       - 'public/**'
+      - 'build.yml'
   pull_request:
     branches: [main]
     paths:
@@ -16,6 +17,7 @@ on:
       - 'server.ts'
       - 'database.ts'
       - 'public/**'
+      - 'build.yml'
 
 jobs:
   build:
