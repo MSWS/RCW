@@ -28,7 +28,7 @@ jobs:
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ gitea.server_url }}
+          registry: ${{ vars.GITEA_REGISTRY }}
           username: ${{ gitea.actor }}
           password: ${{ secrets.GITEA_TOKEN }}
 
@@ -38,5 +38,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ gitea.server_url }}/${{ gitea.repository }}:${{ gitea.sha }}
-            ${{ gitea.server_url }}/${{ gitea.repository }}:latest
+            ${{ vars.GITEA_REGISTRY }}/${{ gitea.repository }}:${{ gitea.sha }}
+            ${{ vars.GITEA_REGISTRY }}/${{ gitea.repository }}:latest
