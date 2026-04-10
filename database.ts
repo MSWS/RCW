@@ -215,6 +215,36 @@ export class RcwDatabase {
      * Silently returns [] on invalid FTS5 query syntax.
      */
     search(query: string, filter = "all", limit = 100): SearchResult[] {
+        const seen = new Set<string>();
+        const results: SearchResult[] = [];
+
+        // ID substring match — only runs when query looks like a cite (e.g. "69.50.401")
+        if (/^[\d.]+$/.test(query)) {
+            try {
+                const idClauses: string[] = ["id LIKE ?"];
+                const idParams: any[] = [`%${query}%`];
+                if (filter !== "all") { idClauses.push("state = ?"); idParams.push(filter); }
+                const idRows = this.db.prepare(`
+          SELECT id, rcw_title, chapter, heading, state, text FROM sections
+          WHERE ${idClauses.join(" AND ")}
+          ORDER BY sort_order
+          LIMIT ?
+        `).all(...idParams, limit) as any[];
+                for (const r of idRows) {
+                    seen.add(r.id);
+                    results.push({
+                        id: r.id,
+                        rcwTitle: r.rcw_title,
+                        chapter: r.chapter,
+                        heading: r.heading,
+                        snippet: r.text.slice(0, 200),
+                        state: r.state as ReadState,
+                    });
+                }
+            } catch { /* ignore */ }
+        }
+
+        // FTS full-text search
         try {
             const clauses: string[] = ["sections_fts MATCH ?"];
             const params: any[] = [query];
@@ -237,17 +267,21 @@ export class RcwDatabase {
         LIMIT ?
       `).all(...params, limit) as any[];
 
-            return rows.map((r) => ({
-                id: r.id,
-                rcwTitle: r.rcw_title,
-                chapter: r.chapter,
-                heading: r.heading,
-                snippet: r.snippet,
-                state: r.state as ReadState,
-            }));
-        } catch {
-            return [];
-        }
+            for (const r of rows) {
+                if (seen.has(r.id)) continue;
+                seen.add(r.id);
+                results.push({
+                    id: r.id,
+                    rcwTitle: r.rcw_title,
+                    chapter: r.chapter,
+                    heading: r.heading,
+                    snippet: r.snippet,
+                    state: r.state as ReadState,
+                });
+            }
+        } catch { /* ignore */ }
+
+        return results.slice(0, limit);
     }
 
     getSection(cite: string): SectionRow | null {
