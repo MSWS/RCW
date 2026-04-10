@@ -32,6 +32,24 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * Given an escaped section body, replace "RCW XX.YY.ZZZ" patterns with
+ * hyperlinks. Looks up each cite in the DB to get its heading for the tooltip.
+ */
+function linkifyCites(escapedText: string, selfId: string): string {
+  return escapedText.replace(
+    /\bRCW\s+(\d+[A-Z]?\.\d+[A-Z]?\.\d+[A-Z]?)\b/g,
+    (_match, cite: string) => {
+      const parts = cite.split(".");
+      const id = `${parts[0]}/${parts[0]}.${parts[1]}/${cite}`;
+      if (id === selfId) return `RCW ${cite}`;
+      const linked = db.getSection(id);
+      const tooltip = linked?.heading ? ` data-tooltip="${esc(linked.heading)}"` : "";
+      return `RCW <a class="rcw-ref" href="/section?cite=${encodeURIComponent(id)}"${tooltip}>${cite}</a>`;
+    }
+  );
+}
+
 function readerPage(section: SectionRow): string {
   const s = db.getStats();
   const pct = ((s.read / s.total) * 100).toFixed(1);
@@ -51,6 +69,17 @@ function readerPage(section: SectionRow): string {
   .header-text h2 { font-size: 1.15rem; color: #1a1a1a; font-weight: 600; }
   .actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
   pre { white-space: pre-wrap; font-family: Georgia, serif; line-height: 1.7; font-size: 1rem; }
+  a.rcw-ref { color: #226; text-decoration: underline dotted; position: relative; }
+  a.rcw-ref[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute; bottom: calc(100% + 4px); left: 0;
+    background: #1a1a1a; color: #fff;
+    padding: 0.3rem 0.6rem; border-radius: 4px;
+    font-size: 0.78rem; line-height: 1.4;
+    white-space: normal; max-width: 280px; min-width: 120px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    pointer-events: none; z-index: 10;
+  }
 </style>
 </head>
 <body>
@@ -67,7 +96,7 @@ function readerPage(section: SectionRow): string {
 </header>
 <progress value="${s.read}" max="${s.total}"></progress>
 <p class="meta">${s.read} read · ${s.skipped} skipped · ${s.unread} remaining · ${pct}% complete</p>
-<pre>${esc(section.text)}</pre>
+<pre>${linkifyCites(esc(section.text), cite)}</pre>
 <script>
 async function act(action) {
   await fetch('/' + action, {
