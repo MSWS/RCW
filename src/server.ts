@@ -54,6 +54,10 @@ const baseStyle = `
   button:hover { filter: brightness(0.93); }
   progress { width: 100%; height: 6px; margin-bottom: 1rem; }
   .meta { font-size: 0.8rem; color: #888; margin-bottom: 1.5rem; }
+  footer { max-width: 960px; margin: 2rem auto 0; padding: 1rem 1.25rem; border-top: 1px solid #e0dbd2; display: flex; gap: 1rem; font-size: 0.82rem; flex-wrap: wrap; }
+  footer a { color: #1e4080; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  .footer-sep { color: #d0ccc4; }
 `;
 
 function esc(s: string): string {
@@ -186,6 +190,7 @@ if (IS_GUEST) {
 }
 </script>
 </div>
+${siteFooter(username)}
 </body>
 </html>`;
 }
@@ -261,6 +266,102 @@ ${navBar(null, isSignup ? "signup" : "login")}
 </html>`;
 }
 
+function siteFooter(username: string | null): string {
+  const resetSection = username
+    ? `<span class="footer-sep">·</span><a href="/account#reset">Reset progress</a><span class="footer-sep">·</span><a href="/account">Account</a>`
+    : `<span class="footer-sep">·</span><a href="#" onclick="if(confirm('Reset all local reading progress?')){localStorage.removeItem('rcw_guest_state');localStorage.removeItem('rcw_guest_last');window.location.href='/';}return false;">Reset progress</a>`;
+  return `<footer>
+  <a href="https://msws.xyz/s/donate">Donate</a>
+  <span class="footer-sep">·</span>
+  <a href="https://git.msws.xyz/MS/RCW">Source</a>
+  ${resetSection}
+</footer>`;
+}
+
+function accountPage(username: string, notice?: string, error?: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account — RCW</title>
+<style>
+  ${baseStyle}
+  .page h1 { font-size: 1.3rem; font-weight: 700; margin-bottom: 2rem; color: #1c1c1a; }
+  .section-card { background: #fff; border: 1px solid #e0dbd2; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.25rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .section-card h2 { font-size: 0.95rem; font-weight: 700; color: #1c1c1a; margin-bottom: 1.1rem; }
+  .field { margin-bottom: 1rem; }
+  .field label { display: block; font-size: 0.8rem; font-weight: 600; color: #6b6b65; margin-bottom: 0.35rem; letter-spacing: 0.02em; text-transform: uppercase; }
+  .field input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #d0ccc4; border-radius: 6px; font-size: 0.95rem; font-family: inherit; background: #faf9f7; color: #1c1c1a; max-width: 360px; }
+  .field input:focus { outline: none; border-color: #1e4080; box-shadow: 0 0 0 3px rgba(30,64,128,0.12); background: #fff; }
+  .row-btn { margin-top: 0.25rem; }
+  .notice { background: #f0fdf4; border: 1px solid #86efac; color: #166534; font-size: 0.85rem; padding: 0.6rem 0.75rem; border-radius: 6px; margin-bottom: 1.25rem; }
+  .error { background: #fff5f5; border: 1px solid #fca5a5; color: #b91c1c; font-size: 0.85rem; padding: 0.6rem 0.75rem; border-radius: 6px; margin-bottom: 1.25rem; }
+  .danger-btn { background: #fff; color: #b91c1c; border-color: #fca5a5; }
+  .danger-btn:hover { background: #fff5f5; filter: none; }
+  .reset-confirm { display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e0dbd2; }
+</style>
+</head>
+<body>
+${navBar(username)}
+<div class="page">
+  <h1>Account</h1>
+  ${notice ? `<div class="notice">${esc(notice)}</div>` : ""}
+  ${error ? `<div class="error">${esc(error)}</div>` : ""}
+
+  <div class="section-card">
+    <h2>Change username</h2>
+    <form method="POST" action="/account/username">
+      <div class="field">
+        <label for="new-username">New username</label>
+        <input type="text" id="new-username" name="new_username" autocomplete="username" value="${esc(username)}" required>
+      </div>
+      <div class="field">
+        <label for="confirm-pass-u">Current password</label>
+        <input type="password" id="confirm-pass-u" name="password" autocomplete="current-password" required>
+      </div>
+      <div class="row-btn"><button class="primary" type="submit">Update username</button></div>
+    </form>
+  </div>
+
+  <div class="section-card">
+    <h2>Change password</h2>
+    <form method="POST" action="/account/password">
+      <div class="field">
+        <label for="current-pass">Current password</label>
+        <input type="password" id="current-pass" name="current_password" autocomplete="current-password" required>
+      </div>
+      <div class="field">
+        <label for="new-pass">New password</label>
+        <input type="password" id="new-pass" name="new_password" autocomplete="new-password" required>
+      </div>
+      <div class="row-btn"><button class="primary" type="submit">Update password</button></div>
+    </form>
+  </div>
+
+  <div class="section-card" id="reset">
+    <h2>Reset progress</h2>
+    <p style="font-size:0.875rem;color:#6b6b65;margin-bottom:1rem;">This will permanently delete all your reading progress. This cannot be undone.</p>
+    <button class="danger-btn" type="button" onclick="document.getElementById('reset-confirm').style.display='block';this.style.display='none'">Reset progress…</button>
+    <div class="reset-confirm" id="reset-confirm">
+      <form method="POST" action="/account/reset">
+        <div class="field">
+          <label for="reset-pass">Enter your password to confirm</label>
+          <input type="password" id="reset-pass" name="password" autocomplete="current-password" required autofocus>
+        </div>
+        <div style="display:flex;gap:0.5rem;">
+          <button class="danger-btn" type="submit">Yes, reset all progress</button>
+          <button type="button" onclick="document.getElementById('reset-confirm').style.display='none';document.querySelector('.danger-btn').style.display=''">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+${siteFooter(username)}
+</body>
+</html>`;
+}
+
 // ── Request handler ───────────────────────────────────────────────────────────
 
 async function handle(req: Request): Promise<Response> {
@@ -303,8 +404,8 @@ async function handle(req: Request): Promise<Response> {
       const pass  = form.get("password") ?? "";
       if (uname.length < 1)
         return htmlResp(authPage("Sign up", "/signup", "Username is required."));
-      if (pass.length < 8)
-        return htmlResp(authPage("Sign up", "/signup", "Password must be at least 8 characters."));
+      if (pass.length < 1)
+        return htmlResp(authPage("Sign up", "/signup", "Password is required."));
       if (db.getUserByUsername(uname))
         return htmlResp(authPage("Sign up", "/signup", "Username already taken."));
       const hash   = await Bun.password.hash(pass);
@@ -389,6 +490,63 @@ async function handle(req: Request): Promise<Response> {
       db.setState(cite, status as "unread" | "read" | "skipped", userId);
     }
     return jsonResp({ ok: true });
+  }
+
+  // ── Account ────────────────────────────────────────────────────────────────
+
+  if (url.pathname === "/account") {
+    if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
+    return htmlResp(accountPage(username));
+  }
+
+  if (url.pathname === "/account/username" && req.method === "POST") {
+    if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
+    const form = new URLSearchParams(await req.text());
+    const newUsername = form.get("new_username")?.trim() ?? "";
+    const pass = form.get("password") ?? "";
+    const user = db.getUserById(userId)!;
+    if (!(await Bun.password.verify(pass, user.passwordHash)))
+      return htmlResp(accountPage(username, undefined, "Incorrect password."));
+    if (newUsername.length < 1)
+      return htmlResp(accountPage(username, undefined, "Username is required."));
+    if (newUsername !== username && db.getUserByUsername(newUsername))
+      return htmlResp(accountPage(username, undefined, "Username already taken."));
+    db.updateUsername(userId, newUsername);
+    // Update session to reflect new username
+    const cookie = req.headers.get("Cookie") ?? "";
+    const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
+    if (match?.[1]) sessions.set(match[1], { userId, username: newUsername });
+    return htmlResp(accountPage(newUsername, "Username updated."));
+  }
+
+  if (url.pathname === "/account/password" && req.method === "POST") {
+    if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
+    const form = new URLSearchParams(await req.text());
+    const currentPass = form.get("current_password") ?? "";
+    const newPass = form.get("new_password") ?? "";
+    const user = db.getUserById(userId)!;
+    if (!(await Bun.password.verify(currentPass, user.passwordHash)))
+      return htmlResp(accountPage(username, undefined, "Incorrect current password."));
+    if (newPass.length < 1)
+      return htmlResp(accountPage(username, undefined, "New password is required."));
+    const newHash = await Bun.password.hash(newPass);
+    db.updatePassword(userId, newHash);
+    return htmlResp(accountPage(username, "Password updated."));
+  }
+
+  if (url.pathname === "/account/reset" && req.method === "POST") {
+    if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
+    const form = new URLSearchParams(await req.text());
+    const pass = form.get("password") ?? "";
+    const user = db.getUserById(userId)!;
+    if (!(await Bun.password.verify(pass, user.passwordHash)))
+      return htmlResp(accountPage(username, undefined, "Incorrect password — progress not reset."));
+    db.resetProgress(userId);
+    deleteSession(req);
+    return new Response(null, {
+      status: 302,
+      headers: { "Location": "/login", "Set-Cookie": "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" },
+    });
   }
 
   // ── Reader ─────────────────────────────────────────────────────────────────

@@ -178,6 +178,26 @@ export class RcwDatabase {
         return { id: row.id, username: row.username, passwordHash: row.password_hash };
     }
 
+    getUserById(id: number): UserRow | null {
+        const row = this.db.prepare(
+            "SELECT id, username, password_hash FROM users WHERE id = ?"
+        ).get(id) as any;
+        if (!row) return null;
+        return { id: row.id, username: row.username, passwordHash: row.password_hash };
+    }
+
+    updateUsername(userId: number, newUsername: string): void {
+        this.db.prepare("UPDATE users SET username = ? WHERE id = ?").run(newUsername, userId);
+    }
+
+    updatePassword(userId: number, newHash: string): void {
+        this.db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newHash, userId);
+    }
+
+    resetProgress(userId: number): void {
+        this.db.prepare("DELETE FROM user_section_state WHERE user_id = ?").run(userId);
+    }
+
     // ── Indexing ──────────────────────────────────────────────────────────────
 
     /**
