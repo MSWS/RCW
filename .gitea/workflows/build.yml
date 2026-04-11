@@ -24,7 +24,7 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
-            -v "$(pwd)/src:/app/src:ro" \
+            -v "$(pwd)/src:/app/src" \
             -w /app/src \
             oven/bun:1-alpine \
             bun test
