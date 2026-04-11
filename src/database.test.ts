@@ -210,6 +210,12 @@ describe("getTitleStats", () => {
     expect(titles.map(t => t.rcwTitle)).toEqual(["1", "2"]);
   });
 
+  test("includes chapter count per title", () => {
+    const titles = db.getTitleStats("all", "", null);
+    const t1 = titles.find(t => t.rcwTitle === "1")!;
+    expect(t1.chapters).toBe(1); // only chapter 1.04
+  });
+
   test("counts reflect user state", () => {
     const uid = db.createUser("alice", "hash");
     db.setState("1/1.04/1.04.013", "read", uid);

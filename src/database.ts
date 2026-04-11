@@ -28,6 +28,7 @@ export interface TitleStats {
     skipped: number;
     total: number;
     unread: number;
+    chapters: number;
 }
 
 export interface ChapterStats {
@@ -499,7 +500,8 @@ export class RcwDatabase {
         s.rcw_title,
         SUM(CASE WHEN uss.state = 'read'    THEN 1 ELSE 0 END) as read,
         SUM(CASE WHEN uss.state = 'skipped' THEN 1 ELSE 0 END) as skipped,
-        COUNT(*) as total
+        COUNT(*) as total,
+        COUNT(DISTINCT s.chapter) as chapters
       FROM sections s
       LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
       ${where}
@@ -513,6 +515,7 @@ export class RcwDatabase {
                 skipped: r.skipped ?? 0,
                 total: r.total,
                 unread: r.total - (r.read ?? 0) - (r.skipped ?? 0),
+                chapters: r.chapters ?? 0,
             }))
             .sort((a, b) => naturalSort(a.rcwTitle, b.rcwTitle));
     }

@@ -564,26 +564,113 @@
 
     /* ── Bulk-skip button ── */
     .skip-btn {
-      padding: 0.2rem 0.6rem;
-      border: 1px solid var(--skip-border);
+      padding: 0.15rem 0.5rem;
+      border: 1px solid var(--border);
       border-radius: 999px;
-      background: var(--skip-tint);
-      color: var(--skip-color);
-      font-size: 0.68rem;
-      font-weight: 700;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.67rem;
+      font-weight: 500;
       cursor: pointer;
-      letter-spacing: 0.02em;
-      transition: filter 0.15s, transform 0.1s;
+      letter-spacing: 0.01em;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
       flex-shrink: 0;
       white-space: nowrap;
+      opacity: 0.6;
+    }
+
+    .title-row:hover .skip-btn,
+    .chapter-row:hover .skip-btn {
+      opacity: 1;
     }
 
     .skip-btn:hover {
-      filter: brightness(0.92);
-      transform: scale(1.05);
+      color: var(--skip-color);
+      border-color: var(--skip-border);
+      background: var(--skip-tint);
+      opacity: 1;
     }
 
-    .skip-btn.skipped {
+    .skip-btn.unskip {
+      color: var(--skip-color);
+      border-color: var(--skip-border);
+      background: var(--skip-tint);
+      opacity: 0.8;
+    }
+
+    .skip-btn.unskip:hover {
+      background: var(--skip-bg);
+      color: white;
+      border-color: var(--skip-bg);
+      opacity: 1;
+    }
+
+    /* ── Confirmation dialog ── */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+
+    .confirm-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      max-width: 340px;
+      width: calc(100% - 2rem);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    }
+
+    .confirm-box h2 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .confirm-box p {
+      font-size: 0.83rem;
+      color: var(--muted);
+      margin-bottom: 1.1rem;
+      line-height: 1.5;
+    }
+
+    .confirm-actions {
+      display: flex;
+      gap: 0.6rem;
+      justify-content: flex-end;
+    }
+
+    .confirm-cancel {
+      padding: 0.4rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 0.83rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .confirm-cancel:hover { background: var(--bg); }
+
+    .confirm-ok {
+      padding: 0.4rem 1rem;
+      border: 1px solid var(--skip-border);
+      border-radius: 6px;
+      background: var(--skip-tint);
+      color: var(--skip-color);
+      font-size: 0.83rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .confirm-ok:hover {
       background: var(--skip-bg);
       color: white;
       border-color: var(--skip-bg);
@@ -733,14 +820,81 @@
       });
     }
 
-    // Bulk skip/unskip a title or chapter (authenticated users only).
+    // ── Confirmation dialog ───────────────────────────────────────────────────
+
+    // Show a modal confirmation dialog. Returns a Promise<boolean>.
+    function confirmDialog(title, message) {
+      return new Promise(function (resolve) {
+        var overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        overlay.innerHTML =
+          '<div class="confirm-box">' +
+          '<h2>' + title + '</h2>' +
+          '<p>' + message + '</p>' +
+          '<div class="confirm-actions">' +
+          '<button class="confirm-cancel">Cancel</button>' +
+          '<button class="confirm-ok">Skip</button>' +
+          '</div></div>';
+
+        function close(result) {
+          document.body.removeChild(overlay);
+          resolve(result);
+        }
+
+        overlay.querySelector('.confirm-cancel').addEventListener('click', function () { close(false); });
+        overlay.querySelector('.confirm-ok').addEventListener('click', function () { close(true); });
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(false); });
+        document.addEventListener('keydown', function onKey(e) {
+          if (e.key === 'Escape') { close(false); document.removeEventListener('keydown', onKey); }
+          if (e.key === 'Enter')  { close(true);  document.removeEventListener('keydown', onKey); }
+        });
+        document.body.appendChild(overlay);
+        overlay.querySelector('.confirm-ok').focus();
+      });
+    }
+
+    // ── Guest bulk state ──────────────────────────────────────────────────────
+
+    // For guests: fetch all sections under a path prefix via /api/toc and update
+    // localStorage for the ones that qualify (unread→skipped, skipped→unread).
+    async function guestBulkSetState(tocPath, state) {
+      var parts = tocPath.split('/');
+      var rcwTitle = parts[0];
+      var chapter  = parts[1]; // may be undefined (title-level)
+      var gs = guestGetState();
+
+      if (chapter) {
+        // Load section list for this chapter
+        var res = await fetch('/api/toc/' + encodeURIComponent(rcwTitle) + '/' + encodeURIComponent(chapter));
+        var sections = await res.json();
+        sections.forEach(function (sec) {
+          var eff = gs[sec.id] || 'unread';
+          if (state === 'skipped' && eff === 'unread') gs[sec.id] = 'skipped';
+          if (state === 'unread'  && eff === 'skipped') delete gs[sec.id];
+        });
+      } else {
+        // Load all chapters, then all sections
+        var chRes = await fetch('/api/toc/' + encodeURIComponent(rcwTitle));
+        var chapters = await chRes.json();
+        for (var ci = 0; ci < chapters.length; ci++) {
+          var ch = chapters[ci];
+          var secRes = await fetch('/api/toc/' + encodeURIComponent(rcwTitle) + '/' + encodeURIComponent(ch.chapter));
+          var secs = await secRes.json();
+          secs.forEach(function (sec) {
+            var eff = gs[sec.id] || 'unread';
+            if (state === 'skipped' && eff === 'unread') gs[sec.id] = 'skipped';
+            if (state === 'unread'  && eff === 'skipped') delete gs[sec.id];
+          });
+        }
+      }
+      localStorage.setItem('rcw_guest_state', JSON.stringify(gs));
+    }
+
+    // Bulk skip/unskip a title or chapter.
     // path: e.g. "1" for a title, "1/1.04" for a chapter.
     async function bulkSetState(path, state) {
       if (IS_GUEST) {
-        // For guests, update localStorage for all matching cites.
-        var gs = guestGetState();
-        // We'll update after chapters/sections are loaded; for now just track.
-        // Guest bulk-skip is best-effort: we apply to what we know from loaded data.
+        await guestBulkSetState(path, state);
         return;
       }
       await fetch('/api/toc/' + path.split('/').map(encodeURIComponent).join('/'), {
@@ -751,22 +905,40 @@
     }
 
     // Make a skip/unskip button for a title or chapter row.
-    // isSkipped: whether all unread sections in this scope are currently skipped
-    //   (i.e. unread count is 0 and skipped > 0).
+    // stats: { read, skipped, unread, total }
+    // isTitle: true for title rows (confirmation message mentions chapters too)
+    // numChapters: only used when isTitle=true for the confirmation message
     // onToggle: called after the action completes.
-    function makeSkipBtn(tocPath, stats, onToggle) {
+    function makeSkipBtn(tocPath, stats, isTitle, numChapters, onToggle) {
+      // Don't show skip button if everything is already read (nothing to skip)
+      if (stats.unread === 0 && stats.skipped === 0) return null;
+
+      var isUnskip = stats.unread === 0 && stats.skipped > 0;
       var btn = document.createElement('button');
-      btn.className = 'skip-btn' + (stats.unread === 0 && stats.skipped > 0 ? ' skipped' : '');
-      btn.textContent = (stats.unread === 0 && stats.skipped > 0) ? '→ unskip' : '→ skip';
-      btn.title = btn.textContent === '→ skip'
-        ? 'Skip all unread sections in this section'
-        : 'Un-skip all skipped sections';
+      btn.className = 'skip-btn' + (isUnskip ? ' unskip' : '');
+      btn.textContent = isUnskip ? '↩ unskip' : '→ skip';
+      btn.title = isUnskip ? 'Un-skip all skipped sections' : 'Skip all unread sections';
+
       btn.addEventListener('click', async function (e) {
-        e.stopPropagation(); // don't collapse/expand the row
-        var isCurrentlySkipped = btn.classList.contains('skipped');
-        var newState = isCurrentlySkipped ? 'unread' : 'skipped';
+        e.stopPropagation();
+        var isCurrentlyUnskip = btn.classList.contains('unskip');
+        var newState = isCurrentlyUnskip ? 'unread' : 'skipped';
+
+        if (newState === 'skipped') {
+          // Confirmation dialog
+          var count = stats.unread;
+          var msg;
+          if (isTitle && numChapters > 1) {
+            msg = 'Skip <strong>' + count + ' unread article' + (count !== 1 ? 's' : '') +
+                  '</strong> across <strong>' + numChapters + ' chapter' + (numChapters !== 1 ? 's' : '') + '</strong>?';
+          } else {
+            msg = 'Skip <strong>' + count + ' unread article' + (count !== 1 ? 's' : '') + '</strong>?';
+          }
+          var confirmed = await confirmDialog('Skip section?', msg);
+          if (!confirmed) return;
+        }
+
         await bulkSetState(tocPath, newState);
-        // Invalidate chapter/section caches so they re-render.
         document.querySelectorAll('[data-loaded]').forEach(function (el) { el.removeAttribute('data-loaded'); });
         loadStats();
         onToggle();
@@ -955,10 +1127,10 @@
 
         if (isOpen) renderChapters(chCon, t.rcwTitle);
 
-        // Skip button (authenticated users only — guests have no bulk API)
-        if (!IS_GUEST) {
-          var skipBtn = makeSkipBtn(t.rcwTitle, t, function () { loadToc(); });
-          row.querySelector('.row-right').insertBefore(skipBtn, row.querySelector('.pct-label'));
+        // Skip button (shown when there's something to skip or unskip)
+        var titleSkipBtn = makeSkipBtn(t.rcwTitle, t, true, t.chapters || 0, function () { loadToc(); });
+        if (titleSkipBtn) {
+          row.querySelector('.row-right').insertBefore(titleSkipBtn, row.querySelector('.pct-label'));
         }
 
         row.addEventListener('click', function () {
@@ -1021,13 +1193,13 @@
 
         if (isOpen) renderSections(secCon, rcwTitle, c.chapter);
 
-        // Skip button (authenticated users only)
-        if (!IS_GUEST) {
-          var chSkipBtn = makeSkipBtn(rcwTitle + '/' + c.chapter, c, function () {
-            container.removeAttribute('data-loaded');
-            renderChapters(container, rcwTitle);
-            loadStats();
-          });
+        // Skip button (shown when there's something to skip or unskip)
+        var chSkipBtn = makeSkipBtn(rcwTitle + '/' + c.chapter, c, false, 0, function () {
+          container.removeAttribute('data-loaded');
+          renderChapters(container, rcwTitle);
+          loadStats();
+        });
+        if (chSkipBtn) {
           row.querySelector('.row-right').insertBefore(chSkipBtn, row.querySelector('.pct-label'));
         }
 
