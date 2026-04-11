@@ -253,6 +253,134 @@ describe("getSectionList", () => {
   });
 });
 
+// ── Bulk skip: setTitleState / setChapterState ────────────────────────────────
+
+describe("setTitleState", () => {
+  let uid: number;
+
+  beforeEach(() => {
+    uid = db.createUser("alice", "hash");
+  });
+
+  test("skips all unread sections in a title", () => {
+    db.setTitleState("1", "skipped", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("skipped");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped");
+    // Title 2 is unaffected
+    expect(db.getSection("2/2.04/2.04.010", uid)!.state).toBe("unread");
+  });
+
+  test("does not overwrite already-read sections when skipping", () => {
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setTitleState("1", "skipped", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");   // unchanged
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped"); // was unread
+  });
+
+  test("un-skipping only clears skipped sections, leaves read sections alone", () => {
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setState("1/1.04/1.04.016", "skipped", uid);
+    db.setTitleState("1", "unread", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");    // unchanged
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("unread");  // cleared
+  });
+
+  test("un-skipping a title with no skipped sections is a no-op", () => {
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setTitleState("1", "unread", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("unread");
+  });
+
+  test("marking as read is ignored when allowMarkRead is false (default)", () => {
+    db.setTitleState("1", "read", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("unread");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("unread");
+  });
+
+  test("marking as read works when allowMarkRead is true", () => {
+    db.setTitleState("1", "read", uid, true);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("read");
+  });
+
+  test("bulk skip is isolated between users", () => {
+    const uid2 = db.createUser("bob", "hash");
+    db.setTitleState("1", "skipped", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid2)!.state).toBe("unread");
+  });
+
+  test("stats reflect bulk skip", () => {
+    db.setTitleState("1", "skipped", uid);
+    const stats = db.getStats(uid);
+    expect(stats.skipped).toBe(2);
+    expect(stats.unread).toBe(1); // title 2 still unread
+  });
+});
+
+describe("setChapterState", () => {
+  let uid: number;
+
+  beforeEach(() => {
+    uid = db.createUser("alice", "hash");
+  });
+
+  test("skips all unread sections in a chapter", () => {
+    db.setChapterState("1.04", "skipped", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("skipped");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped");
+    expect(db.getSection("2/2.04/2.04.010", uid)!.state).toBe("unread");
+  });
+
+  test("does not overwrite already-read sections when skipping", () => {
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setChapterState("1.04", "skipped", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped");
+  });
+
+  test("un-skipping only clears skipped sections, leaves read sections alone", () => {
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setState("1/1.04/1.04.016", "skipped", uid);
+    db.setChapterState("1.04", "unread", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("unread");
+  });
+
+  test("marking as read is ignored by default", () => {
+    db.setChapterState("1.04", "read", uid);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("unread");
+  });
+
+  test("marking as read works when allowMarkRead is true", () => {
+    db.setChapterState("1.04", "read", uid, true);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("read");
+  });
+});
+
+describe("resetProgress", () => {
+  test("clears all read and skipped state, leaving everything unread", () => {
+    const uid = db.createUser("alice", "hash");
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setState("1/1.04/1.04.016", "skipped", uid);
+    db.resetProgress(uid);
+    const stats = db.getStats(uid);
+    expect(stats.read).toBe(0);
+    expect(stats.skipped).toBe(0);
+    expect(stats.unread).toBe(stats.total);
+  });
+
+  test("resetProgress does not affect other users", () => {
+    const uid1 = db.createUser("alice", "hash");
+    const uid2 = db.createUser("bob", "hash");
+    db.setState("1/1.04/1.04.013", "read", uid1);
+    db.setState("1/1.04/1.04.013", "read", uid2);
+    db.resetProgress(uid1);
+    expect(db.getSection("1/1.04/1.04.013", uid2)!.state).toBe("read");
+  });
+});
+
 // ── Search ────────────────────────────────────────────────────────────────────
 
 describe("search", () => {

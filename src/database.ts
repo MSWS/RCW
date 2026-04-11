@@ -195,6 +195,7 @@ export class RcwDatabase {
     }
 
     resetProgress(userId: number): void {
+        // Full reset: mark everything unread (clears all read and skipped rows).
         this.db.prepare("DELETE FROM user_section_state WHERE user_id = ?").run(userId);
     }
 
@@ -406,6 +407,61 @@ export class RcwDatabase {
             this.db.prepare(
                 "INSERT OR REPLACE INTO user_section_state (user_id, section_id, state) VALUES (?, ?, ?)"
             ).run(userId, cite, state);
+        }
+    }
+
+    /**
+     * Skip all currently-unread sections in a title, or un-skip them.
+     * Already-read sections are never touched.
+     * Un-skipping (state='unread') only removes 'skipped' rows — read rows stay.
+     *
+     * @param allowMarkRead  When true, state='read' is also accepted (marks all
+     *                       unread sections as read). Default: false.
+     */
+    setTitleState(rcwTitle: string, state: ReadState, userId: number, allowMarkRead = false): void {
+        if (state === "read" && !allowMarkRead) return;
+        this._setBulkState("rcw_title", rcwTitle, state, userId);
+    }
+
+    /**
+     * Skip all currently-unread sections in a chapter, or un-skip them.
+     * Already-read sections are never touched.
+     * Un-skipping (state='unread') only removes 'skipped' rows — read rows stay.
+     *
+     * @param allowMarkRead  When true, state='read' is also accepted.
+     *                       Default: false.
+     */
+    setChapterState(chapter: string, state: ReadState, userId: number, allowMarkRead = false): void {
+        if (state === "read" && !allowMarkRead) return;
+        this._setBulkState("chapter", chapter, state, userId);
+    }
+
+    private _setBulkState(
+        column: "rcw_title" | "chapter",
+        value: string,
+        state: ReadState,
+        userId: number,
+    ): void {
+        if (state === "unread") {
+            // Only clear rows that are currently 'skipped'; leave 'read' rows intact.
+            this.db.prepare(`
+                DELETE FROM user_section_state
+                WHERE user_id = ?
+                  AND state = 'skipped'
+                  AND section_id IN (SELECT id FROM sections WHERE ${column} = ?)
+            `).run(userId, value);
+        } else {
+            // Insert the new state for every section not yet in user_section_state
+            // (i.e. currently 'unread'). INSERT OR IGNORE leaves existing rows alone.
+            this.db.prepare(`
+                INSERT OR IGNORE INTO user_section_state (user_id, section_id, state)
+                SELECT ?, id, ?
+                FROM sections
+                WHERE ${column} = ?
+                  AND id NOT IN (
+                    SELECT section_id FROM user_section_state WHERE user_id = ?
+                  )
+            `).run(userId, state, value, userId);
         }
     }
 

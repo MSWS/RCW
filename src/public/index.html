@@ -562,6 +562,33 @@
       padding-top: 2px;
     }
 
+    /* ── Bulk-skip button ── */
+    .skip-btn {
+      padding: 0.2rem 0.6rem;
+      border: 1px solid var(--skip-border);
+      border-radius: 999px;
+      background: var(--skip-tint);
+      color: var(--skip-color);
+      font-size: 0.68rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: filter 0.15s, transform 0.1s;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .skip-btn:hover {
+      filter: brightness(0.92);
+      transform: scale(1.05);
+    }
+
+    .skip-btn.skipped {
+      background: var(--skip-bg);
+      color: white;
+      border-color: var(--skip-bg);
+    }
+
     /* ── Misc ── */
     .loading-msg {
       padding: 1.5rem;
@@ -704,6 +731,47 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ state: status })
       });
+    }
+
+    // Bulk skip/unskip a title or chapter (authenticated users only).
+    // path: e.g. "1" for a title, "1/1.04" for a chapter.
+    async function bulkSetState(path, state) {
+      if (IS_GUEST) {
+        // For guests, update localStorage for all matching cites.
+        var gs = guestGetState();
+        // We'll update after chapters/sections are loaded; for now just track.
+        // Guest bulk-skip is best-effort: we apply to what we know from loaded data.
+        return;
+      }
+      await fetch('/api/toc/' + path.split('/').map(encodeURIComponent).join('/'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: state })
+      });
+    }
+
+    // Make a skip/unskip button for a title or chapter row.
+    // isSkipped: whether all unread sections in this scope are currently skipped
+    //   (i.e. unread count is 0 and skipped > 0).
+    // onToggle: called after the action completes.
+    function makeSkipBtn(tocPath, stats, onToggle) {
+      var btn = document.createElement('button');
+      btn.className = 'skip-btn' + (stats.unread === 0 && stats.skipped > 0 ? ' skipped' : '');
+      btn.textContent = (stats.unread === 0 && stats.skipped > 0) ? '→ unskip' : '→ skip';
+      btn.title = btn.textContent === '→ skip'
+        ? 'Skip all unread sections in this section'
+        : 'Un-skip all skipped sections';
+      btn.addEventListener('click', async function (e) {
+        e.stopPropagation(); // don't collapse/expand the row
+        var isCurrentlySkipped = btn.classList.contains('skipped');
+        var newState = isCurrentlySkipped ? 'unread' : 'skipped';
+        await bulkSetState(tocPath, newState);
+        // Invalidate chapter/section caches so they re-render.
+        document.querySelectorAll('[data-loaded]').forEach(function (el) { el.removeAttribute('data-loaded'); });
+        loadStats();
+        onToggle();
+      });
+      return btn;
     }
 
     function makeBadge(cite, serverState) {
@@ -878,12 +946,20 @@
           segBar(t.read, t.skipped, t.total, true) +
           '</div>' +
           '</div>' +
-          '<div class="row-right"><div class="pct-label">' + p + '</div></div>';
+          '<div class="row-right" style="display:flex;align-items:center;gap:0.5rem">' +
+          '<div class="pct-label">' + p + '</div>' +
+          '</div>';
 
         var chCon = document.createElement('div');
         chCon.className = 'chapter-container' + (isOpen ? ' open' : '');
 
         if (isOpen) renderChapters(chCon, t.rcwTitle);
+
+        // Skip button (authenticated users only — guests have no bulk API)
+        if (!IS_GUEST) {
+          var skipBtn = makeSkipBtn(t.rcwTitle, t, function () { loadToc(); });
+          row.querySelector('.row-right').insertBefore(skipBtn, row.querySelector('.pct-label'));
+        }
 
         row.addEventListener('click', function () {
           if (openTitles.has(t.rcwTitle)) {
@@ -936,12 +1012,24 @@
           segBar(c.read, c.skipped, c.total, true) +
           '</div>' +
           '</div>' +
-          '<div class="row-right"><div class="pct-label">' + p + '</div></div>';
+          '<div class="row-right" style="display:flex;align-items:center;gap:0.5rem">' +
+          '<div class="pct-label">' + p + '</div>' +
+          '</div>';
 
         var secCon = document.createElement('div');
         secCon.className = 'section-container' + (isOpen ? ' open' : '');
 
         if (isOpen) renderSections(secCon, rcwTitle, c.chapter);
+
+        // Skip button (authenticated users only)
+        if (!IS_GUEST) {
+          var chSkipBtn = makeSkipBtn(rcwTitle + '/' + c.chapter, c, function () {
+            container.removeAttribute('data-loaded');
+            renderChapters(container, rcwTitle);
+            loadStats();
+          });
+          row.querySelector('.row-right').insertBefore(chSkipBtn, row.querySelector('.pct-label'));
+        }
 
         row.addEventListener('click', function () {
           if (openChapters.has(chKey)) {

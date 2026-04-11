@@ -329,7 +329,7 @@ describe("account", () => {
   });
 });
 
-// ── /api/toc ──────────────────────────────────────────────────────────────────
+// ── /api/toc (GET) ────────────────────────────────────────────────────────────
 
 describe("/api/toc", () => {
   test("returns title list", async () => {
@@ -351,5 +351,82 @@ describe("/api/toc", () => {
     expect(res.status).toBe(200);
     const data = await res.json() as { id: string }[];
     expect(data.length).toBe(2);
+  });
+});
+
+// ── PATCH /api/toc/:title and /api/toc/:title/:chapter ────────────────────────
+
+describe("PATCH /api/toc — bulk skip", () => {
+  test("returns 401 for unauthenticated request", async () => {
+    const res = await handle(req("PATCH", "/api/toc/1", { json: { state: "skipped" } }));
+    expect(res.status).toBe(401);
+  });
+
+  test("skips all unread sections in a title", async () => {
+    const token = await signup("alice", "secret");
+    const uid = db.getUserByUsername("alice")!.id;
+    const res = await handle(req("PATCH", "/api/toc/1", { json: { state: "skipped" }, cookie: token }));
+    expect(res.status).toBe(200);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("skipped");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped");
+    // Title 2 unaffected
+    expect(db.getSection("2/2.04/2.04.010", uid)!.state).toBe("unread");
+  });
+
+  test("does not overwrite read sections when skipping a title", async () => {
+    const token = await signup("alice", "secret");
+    const uid = db.getUserByUsername("alice")!.id;
+    db.setState("1/1.04/1.04.013", "read", uid);
+    await handle(req("PATCH", "/api/toc/1", { json: { state: "skipped" }, cookie: token }));
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");   // unchanged
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped");
+  });
+
+  test("un-skipping a title only clears skipped sections", async () => {
+    const token = await signup("alice", "secret");
+    const uid = db.getUserByUsername("alice")!.id;
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setState("1/1.04/1.04.016", "skipped", uid);
+    await handle(req("PATCH", "/api/toc/1", { json: { state: "unread" }, cookie: token }));
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");   // read stays read
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("unread"); // skipped cleared
+  });
+
+  test("state=read is rejected (skip-only mode)", async () => {
+    const token = await signup("alice", "secret");
+    const uid = db.getUserByUsername("alice")!.id;
+    await handle(req("PATCH", "/api/toc/1", { json: { state: "read" }, cookie: token }));
+    // All sections should still be unread
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("unread");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("unread");
+  });
+
+  test("skips all unread sections in a chapter", async () => {
+    const token = await signup("alice", "secret");
+    const uid = db.getUserByUsername("alice")!.id;
+    const res = await handle(req("PATCH", "/api/toc/1/1.04", { json: { state: "skipped" }, cookie: token }));
+    expect(res.status).toBe(200);
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("skipped");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped");
+    expect(db.getSection("2/2.04/2.04.010", uid)!.state).toBe("unread");
+  });
+
+  test("does not overwrite read sections when skipping a chapter", async () => {
+    const token = await signup("alice", "secret");
+    const uid = db.getUserByUsername("alice")!.id;
+    db.setState("1/1.04/1.04.013", "read", uid);
+    await handle(req("PATCH", "/api/toc/1/1.04", { json: { state: "skipped" }, cookie: token }));
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("skipped");
+  });
+
+  test("un-skipping a chapter only clears skipped sections", async () => {
+    const token = await signup("alice", "secret");
+    const uid = db.getUserByUsername("alice")!.id;
+    db.setState("1/1.04/1.04.013", "read", uid);
+    db.setState("1/1.04/1.04.016", "skipped", uid);
+    await handle(req("PATCH", "/api/toc/1/1.04", { json: { state: "unread" }, cookie: token }));
+    expect(db.getSection("1/1.04/1.04.013", uid)!.state).toBe("read");
+    expect(db.getSection("1/1.04/1.04.016", uid)!.state).toBe("unread");
   });
 });

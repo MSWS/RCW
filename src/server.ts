@@ -584,7 +584,7 @@ function showMsg(msg, isError) {
   // /api/toc                      → title list with stats
   // /api/toc/:title               → chapter list with stats
   // /api/toc/:title/:chapter      → section list with heading + state
-  if (parts[1] === "api" && parts[2] === "toc") {
+  if (req.method === "GET" && parts[1] === "api" && parts[2] === "toc") {
     const filter = url.searchParams.get("filter") ?? "all";
     const search = url.searchParams.get("search") ?? "";
 
@@ -609,6 +609,29 @@ function showMsg(msg, isError) {
     const { state } = await req.json() as { state?: string };
     if (cite && ["unread", "read", "skipped"].includes(state ?? "")) {
       db.setState(cite, state as "unread" | "read" | "skipped", userId);
+    }
+    return jsonResp({ ok: true });
+  }
+
+  // PATCH /api/toc/:title         body: { state: "skipped"|"unread" }
+  // PATCH /api/toc/:title/:chapter  body: { state: "skipped"|"unread" }
+  // Bulk-skip (or un-skip) all unread sections in a title or chapter.
+  // Already-read sections are never affected.
+  if (req.method === "PATCH" && parts[1] === "api" && parts[2] === "toc" && parts[3]) {
+    if (!userId) return new Response(JSON.stringify({ error: "unauthenticated" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    });
+    const { state } = await req.json() as { state?: string };
+    if (!["unread", "skipped"].includes(state ?? "")) return jsonResp({ ok: true });
+    const s = state as "unread" | "skipped";
+    if (parts[4]) {
+      // Title + chapter
+      const chapter = decodeURIComponent(parts[4]);
+      db.setChapterState(chapter, s, userId);
+    } else {
+      // Title only
+      const rcwTitle = decodeURIComponent(parts[3]);
+      db.setTitleState(rcwTitle, s, userId);
     }
     return jsonResp({ ok: true });
   }
