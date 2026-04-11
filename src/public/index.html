@@ -699,10 +699,10 @@
     }
 
     async function setStatus(cite, status) {
-      await fetch('/set-status', {
-        method: 'POST',
+      await fetch('/api/sections/' + encodeURIComponent(cite), {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cite: cite, status: status })
+        body: JSON.stringify({ state: status })
       });
     }
 

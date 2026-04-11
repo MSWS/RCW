@@ -208,10 +208,10 @@ async function act(action) {
     window.location.href = '/?after=' + encodeURIComponent(CITE);
     return;
   }
-  await fetch('/' + action, {
-    method: 'POST',
+  await fetch('/api/sections/' + encodeURIComponent(CITE), {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cite: CITE })
+    body: JSON.stringify({ state: action === 'read' ? 'read' : 'skipped' })
   });
   window.location.href = '/';
 }
@@ -379,7 +379,7 @@ ${siteFooter()}
 </html>`;
 }
 
-function accountPage(username: string, notice?: string, error?: string): string {
+function accountPage(username: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -415,8 +415,7 @@ ${navBar(username)}
 <div class="account-wrap">
   <h1>Account</h1>
   <p class="subhead">Signed in as <strong>${esc(username)}</strong></p>
-  ${notice ? `<div class="notice">${esc(notice)}</div>` : ""}
-  ${error ? `<div class="error">${esc(error)}</div>` : ""}
+  <div id="msg" style="display:none;margin-bottom:1.25rem"></div>
 
   <div class="pass-card">
     <label for="current-password">Current password</label>
@@ -425,48 +424,65 @@ ${navBar(username)}
 
   <div class="section-card">
     <h2>Change username</h2>
-    <form method="POST" action="/account/username" onsubmit="injectPass(this)">
-      <input type="hidden" name="password">
-      <div class="field">
-        <label for="new-username">New username</label>
-        <input type="text" id="new-username" name="new_username" autocomplete="username" value="${esc(username)}" required>
-      </div>
-      <button class="primary" type="submit">Update username</button>
-    </form>
+    <div class="field">
+      <label for="new-username">New username</label>
+      <input type="text" id="new-username" autocomplete="username" value="${esc(username)}">
+    </div>
+    <button class="primary" onclick="submitPatch('/account/username', {new_username: document.getElementById('new-username').value})">Update username</button>
   </div>
 
   <div class="section-card">
     <h2>Change password</h2>
-    <form method="POST" action="/account/password" onsubmit="injectPass(this)">
-      <input type="hidden" name="password">
-      <div class="field">
-        <label for="new-pass">New password</label>
-        <input type="password" id="new-pass" name="new_password" autocomplete="new-password" required>
-      </div>
-      <button class="primary" type="submit">Update password</button>
-    </form>
+    <div class="field">
+      <label for="new-pass">New password</label>
+      <input type="password" id="new-pass" autocomplete="new-password">
+    </div>
+    <button class="primary" onclick="submitPatch('/account/password', {new_password: document.getElementById('new-pass').value})">Update password</button>
   </div>
 
   <div class="section-card" id="reset">
     <h2>Reset progress</h2>
     <p>This will permanently delete all your reading progress and cannot be undone.</p>
-    <button class="danger-btn" type="button" onclick="document.getElementById('reset-confirm').style.display='block';this.style.display='none'">Reset progress…</button>
-    <div class="reset-confirm" id="reset-confirm">
-      <form method="POST" action="/account/reset" onsubmit="injectPass(this)">
-        <input type="hidden" name="password">
-        <div style="display:flex;gap:0.5rem;">
-          <button class="danger-btn" type="submit">Yes, reset all progress</button>
-          <button type="button" onclick="document.getElementById('reset-confirm').style.display='none';document.querySelector('.danger-btn').style.display=''">Cancel</button>
-        </div>
-      </form>
+    <button class="danger-btn" type="button" id="reset-btn" onclick="document.getElementById('reset-confirm').style.display='block';this.style.display='none'">Reset progress…</button>
+    <div class="reset-confirm" id="reset-confirm" style="display:none">
+      <div style="display:flex;gap:0.5rem;">
+        <button class="danger-btn" onclick="submitPost('/account/reset', {})">Yes, reset all progress</button>
+        <button type="button" onclick="document.getElementById('reset-confirm').style.display='none';document.getElementById('reset-btn').style.display=''">Cancel</button>
+      </div>
     </div>
   </div>
 </div>
 </div>
 ${siteFooter()}
 <script>
-function injectPass(form) {
-  form.querySelector('input[name="password"]').value = document.getElementById('current-password').value;
+function getPass() { return document.getElementById('current-password').value; }
+
+async function submitPatch(url, extra) {
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: getPass(), ...extra })
+  });
+  const data = await res.json();
+  if (data.error) { showMsg(data.error, true); } else { showMsg(data.notice); }
+}
+
+async function submitPost(url, extra) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: getPass(), ...extra })
+  });
+  const data = await res.json();
+  if (data.error) { showMsg(data.error, true); } else { window.location.href = '/login'; }
+}
+
+function showMsg(msg, isError) {
+  var el = document.getElementById('msg');
+  el.textContent = msg;
+  el.className = isError ? 'error' : 'notice';
+  el.style.display = 'block';
+  window.scrollTo(0, 0);
 }
 </script>
 </body>
@@ -593,22 +609,15 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ── Status mutations ───────────────────────────────────────────────────────
-  if (req.method === "POST" && (url.pathname === "/read" || url.pathname === "/skip")) {
+  // PATCH /api/sections/:cite  body: { state: "read"|"skipped"|"unread" }
+  if (req.method === "PATCH" && parts[1] === "api" && parts[2] === "sections" && parts[3]) {
     if (!userId) return new Response(JSON.stringify({ error: "unauthenticated" }), {
       status: 401, headers: { "Content-Type": "application/json" },
     });
-    const { cite } = await req.json() as { cite?: string };
-    if (cite) db.setState(cite, url.pathname === "/read" ? "read" : "skipped", userId);
-    return jsonResp({ ok: true });
-  }
-
-  if (req.method === "POST" && url.pathname === "/set-status") {
-    if (!userId) return new Response(JSON.stringify({ error: "unauthenticated" }), {
-      status: 401, headers: { "Content-Type": "application/json" },
-    });
-    const { cite, status } = await req.json() as { cite?: string; status?: string };
-    if (cite && ["unread", "read", "skipped"].includes(status ?? "")) {
-      db.setState(cite, status as "unread" | "read" | "skipped", userId);
+    const cite = decodeURIComponent(parts[3]);
+    const { state } = await req.json() as { state?: string };
+    if (cite && ["unread", "read", "skipped"].includes(state ?? "")) {
+      db.setState(cite, state as "unread" | "read" | "skipped", userId);
     }
     return jsonResp({ ok: true });
   }
@@ -626,61 +635,53 @@ async function handle(req: Request): Promise<Response> {
     return htmlResp(accountPage(username));
   }
 
-  if (url.pathname === "/account/username" && req.method === "POST") {
-    if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
-    const form = new URLSearchParams(await req.text());
-    const newUsername = form.get("new_username")?.trim() ?? "";
-    const pass = form.get("password") ?? "";
+  if (url.pathname === "/account/username" && req.method === "PATCH") {
+    if (!userId || !username) return jsonResp({ error: "unauthenticated" });
+    const { password, new_username } = await req.json() as { password?: string; new_username?: string };
+    const newUsername = new_username?.trim() ?? "";
     const user = db.getUserById(userId)!;
-    if (!(await Bun.password.verify(pass, user.passwordHash))) {
+    if (!(await Bun.password.verify(password ?? "", user.passwordHash))) {
       log("FAIL", "ACCOUNT_USERNAME_FAIL", `user=${username}`, req);
-      return htmlResp(accountPage(username, undefined, "Incorrect password."));
+      return jsonResp({ error: "Incorrect password." });
     }
-    if (newUsername.length < 1)
-      return htmlResp(accountPage(username, undefined, "Username is required."));
+    if (newUsername.length < 1) return jsonResp({ error: "Username is required." });
     if (newUsername !== username && db.getUserByUsername(newUsername))
-      return htmlResp(accountPage(username, undefined, "Username already taken."));
+      return jsonResp({ error: "Username already taken." });
     db.updateUsername(userId, newUsername);
     log("INFO", "ACCOUNT_USERNAME_OK", `user=${username} new=${newUsername}`, req);
     const cookie = req.headers.get("Cookie") ?? "";
     const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
     if (match?.[1]) sessions.set(match[1], { userId, username: newUsername });
-    return htmlResp(accountPage(newUsername, "Username updated."));
+    return jsonResp({ notice: "Username updated." });
   }
 
-  if (url.pathname === "/account/password" && req.method === "POST") {
-    if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
-    const form = new URLSearchParams(await req.text());
-    const currentPass = form.get("password") ?? "";
-    const newPass = form.get("new_password") ?? "";
+  if (url.pathname === "/account/password" && req.method === "PATCH") {
+    if (!userId || !username) return jsonResp({ error: "unauthenticated" });
+    const { password, new_password } = await req.json() as { password?: string; new_password?: string };
     const user = db.getUserById(userId)!;
-    if (!(await Bun.password.verify(currentPass, user.passwordHash))) {
+    if (!(await Bun.password.verify(password ?? "", user.passwordHash))) {
       log("FAIL", "ACCOUNT_PASSWORD_FAIL", `user=${username}`, req);
-      return htmlResp(accountPage(username, undefined, "Incorrect current password."));
+      return jsonResp({ error: "Incorrect current password." });
     }
-    if (newPass.length < 1)
-      return htmlResp(accountPage(username, undefined, "New password is required."));
-    const newHash = await Bun.password.hash(newPass);
-    db.updatePassword(userId, newHash);
+    if (!new_password?.length) return jsonResp({ error: "New password is required." });
+    db.updatePassword(userId, await Bun.password.hash(new_password));
     log("INFO", "ACCOUNT_PASSWORD_OK", `user=${username}`, req);
-    return htmlResp(accountPage(username, "Password updated."));
+    return jsonResp({ notice: "Password updated." });
   }
 
   if (url.pathname === "/account/reset" && req.method === "POST") {
-    if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
-    const form = new URLSearchParams(await req.text());
-    const pass = form.get("password") ?? "";
+    if (!userId || !username) return jsonResp({ error: "unauthenticated" });
+    const { password } = await req.json() as { password?: string };
     const user = db.getUserById(userId)!;
-    if (!(await Bun.password.verify(pass, user.passwordHash))) {
+    if (!(await Bun.password.verify(password ?? "", user.passwordHash))) {
       log("FAIL", "ACCOUNT_RESET_FAIL", `user=${username}`, req);
-      return htmlResp(accountPage(username, undefined, "Incorrect password — progress not reset."));
+      return jsonResp({ error: "Incorrect password — progress not reset." });
     }
     db.resetProgress(userId);
     log("INFO", "ACCOUNT_RESET_OK", `user=${username}`, req);
     deleteSession(req);
-    return new Response(null, {
-      status: 302,
-      headers: { "Location": "/login", "Set-Cookie": "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" },
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { "Content-Type": "application/json", "Set-Cookie": "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" },
     });
   }
 
