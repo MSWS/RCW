@@ -6,12 +6,11 @@ USER bun
 WORKDIR /app
 
 # Copy source files with correct ownership
-COPY --chown=bun:bun server.ts database.ts ./
-COPY --chown=bun:bun public/ public/
+COPY --chown=bun:bun src/ src/
 
 VOLUME ["/rcw", "/data"]
 
 EXPOSE 3000
 
 # --smol reduces memory overhead on Alpine
-CMD ["bun", "--smol", "server.ts"]
+CMD ["bun", "--smol", "src/server.ts"]

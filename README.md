@@ -1,6 +1,6 @@
 # RCW Reader
 
-A personal reading tracker for the [Revised Code of Washington](https://app.leg.wa.gov/RCW/). Scrape the full text of the RCW, then read through it section by section with progress tracking and full-text search.
+A personal reading tracker for the [Revised Code of Washington](https://app.leg.wa.gov/RCW/). Scrape the full text of the RCW, then read through it section by section with progress tracking, full-text search, and multi-user accounts.
 
 ---
 
@@ -13,7 +13,7 @@ A personal reading tracker for the [Revised Code of Washington](https://app.leg.
 The project has two parts:
 
 1. **`scrape.py`** — Downloads the full text of the RCW from the Washington State Legislature website into a local directory of `.txt` files.
-2. **`server.ts`** — A Bun HTTP server that indexes those files into a SQLite database and serves a web UI for reading and tracking progress.
+2. **`src/server.ts`** — A Bun HTTP server that indexes those files into a SQLite database and serves a web UI for reading and tracking progress.
 
 ## Setup
 
@@ -33,7 +33,7 @@ This populates `./rcw/<title>/<chapter>/<section>.txt`. The scraper is resumable
 Requires [Bun](https://bun.sh).
 
 ```sh
-bun server.ts
+bun src/server.ts
 ```
 
 The server indexes the `./rcw` directory on startup (new sections only; safe to restart). Open [http://localhost:3000](http://localhost:3000) to start reading.
@@ -59,17 +59,40 @@ The compose file expects:
 
 The server is exposed on port 3000 and attached to `local` and `cloudflared` external Docker networks.
 
+Images are published to the container registry on every push to `main` (tagged `:latest`) and `dev` (tagged `:dev`).
+
 ## Features
 
-- **Sequential reader** — Navigate section by section through the entire RCW. Mark each section as **read** or **skip** it.
-- **Index** — Browse the full table of contents by title → chapter → section, with per-level read/skip progress bars.
-- **Full-text search** — FTS5-powered search across all section headings and body text, with highlighted snippets.
-- **Filtering** — Filter the index and search results by read state (all / unread / read / skipped).
-- **Status cycling** — Click any status badge in the index to cycle it between unread → read → skipped without leaving the page.
-- **Progress tracking** — A segmented progress bar shows read vs. skipped vs. unread across the entire corpus.
+- **Sequential reader** — Navigate section by section through the entire RCW. Mark each section as **read** or **skip** it. Cross-referenced RCW citations are hyperlinked with hover tooltips showing the referenced section heading.
+- **Index** — Browse the full table of contents by title → chapter → section, with per-level read/skip progress bars and filtering by state.
+- **Full-text search** — FTS5-powered search across all section headings and body text, with highlighted snippets. Also supports direct section-number lookup (e.g. `69.50.401`).
+- **Multi-user accounts** — Each user has isolated progress. Sign up with a username and password; sessions are stored server-side with `HttpOnly` cookies.
+- **Guest mode** — Visitors without an account can still read and track progress; state is stored in `localStorage` and persists across sessions in the same browser.
+- **Account management** — Change username or password, or reset all reading progress (requires password confirmation).
+- **Rate limiting** — Login attempts are rate-limited to 10 failures per 15-minute window per IP. All auth events are logged in a fail2ban-compatible format.
+- **About page** — Accessible via the footer; explains the project and links to source and donation page.
+
+## Security
+
+Auth events are written to stdout in a structured format suitable for fail2ban monitoring:
+
+```
+2025-01-01T00:00:00.000Z [FAIL] LOGIN_FAIL ip=1.2.3.4 user=alice
+2025-01-01T00:00:00.000Z [WARN] LOGIN_BLOCKED ip=1.2.3.4 rate limited
+```
+
+A fail2ban filter can match `\[FAIL\] LOGIN_FAIL` or `\[WARN\] LOGIN_BLOCKED` lines on the configured log path.
 
 ## Data model
 
-Sections are stored in a SQLite database with FTS5 full-text search. Each section has an ID in cite format (`<title>/<chapter>/<section>`, e.g. `1/1.04/1.04.013`) and a read state of `unread`, `read`, or `skipped`.
+Sections are stored in a SQLite database with FTS5 full-text search. Each section has an ID in cite format (`<title>/<chapter>/<section>`, e.g. `1/1.04/1.04.013`).
 
-Traversal order follows the natural sort order of the source directory (numerically sorted titles → chapters → sections).
+User progress is tracked in a `user_section_state` table — only non-unread rows are stored (absent row = unread). Guest progress uses the same `unread`/`read`/`skipped` states, stored client-side in `localStorage`.
+
+## Tests
+
+```sh
+bun test src/
+```
+
+Unit tests cover database indexing, user management, state isolation, search, and traversal. Tests run automatically in CI on every push to `main` or `dev`.

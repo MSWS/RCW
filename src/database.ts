@@ -44,6 +44,12 @@ export interface SectionInfo {
     state: ReadState;
 }
 
+export interface UserRow {
+    id: number;
+    username: string;
+    passwordHash: string;
+}
+
 // Matches: [ \n 1951 c 5 s 1 \n .] and variants
 const TRAILING_METADATA_RE = /\[\s*\n[\s\S]*?\.\s*\]\s*$/;
 
@@ -68,6 +74,7 @@ export class RcwDatabase {
         this.db = new Database(dbPath, { create: true });
         this.db.run("PRAGMA journal_mode = WAL");
         this.db.run("PRAGMA synchronous = NORMAL");
+        this.db.run("PRAGMA foreign_keys = ON");
         this.initSchema();
     }
 
@@ -119,7 +126,79 @@ export class RcwDatabase {
         VALUES (new.rowid, new.id, new.heading, new.text);
       END
     `);
+
+        // Users table
+        this.db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
+        password_hash TEXT NOT NULL,
+        created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+      )
+    `);
+
+        // Per-user section state — only non-unread rows are stored (absent = unread)
+        this.db.run(`
+      CREATE TABLE IF NOT EXISTS user_section_state (
+        user_id    INTEGER NOT NULL REFERENCES users(id),
+        section_id TEXT    NOT NULL REFERENCES sections(id),
+        state      TEXT    NOT NULL CHECK(state IN ('read', 'skipped')),
+        PRIMARY KEY (user_id, section_id)
+      )
+    `);
+        this.db.run("CREATE INDEX IF NOT EXISTS idx_uss_user ON user_section_state(user_id)");
     }
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
+
+    createUser(username: string, passwordHash: string): number {
+        const isFirst = (this.db.prepare("SELECT COUNT(*) as n FROM users").get() as any).n === 0;
+        const result = this.db.prepare(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)"
+        ).run(username, passwordHash);
+        const userId = result.lastInsertRowid as number;
+
+        if (isFirst) {
+            // Migrate any legacy JSON-imported state (sections.state) to the first user
+            this.db.prepare(`
+        INSERT OR IGNORE INTO user_section_state (user_id, section_id, state)
+        SELECT ?, id, state FROM sections WHERE state != 'unread'
+      `).run(userId);
+            console.log("Migrated existing section states to first user.");
+        }
+
+        return userId;
+    }
+
+    getUserByUsername(username: string): UserRow | null {
+        const row = this.db.prepare(
+            "SELECT id, username, password_hash FROM users WHERE username = ?"
+        ).get(username) as any;
+        if (!row) return null;
+        return { id: row.id, username: row.username, passwordHash: row.password_hash };
+    }
+
+    getUserById(id: number): UserRow | null {
+        const row = this.db.prepare(
+            "SELECT id, username, password_hash FROM users WHERE id = ?"
+        ).get(id) as any;
+        if (!row) return null;
+        return { id: row.id, username: row.username, passwordHash: row.password_hash };
+    }
+
+    updateUsername(userId: number, newUsername: string): void {
+        this.db.prepare("UPDATE users SET username = ? WHERE id = ?").run(newUsername, userId);
+    }
+
+    updatePassword(userId: number, newHash: string): void {
+        this.db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newHash, userId);
+    }
+
+    resetProgress(userId: number): void {
+        this.db.prepare("DELETE FROM user_section_state WHERE user_id = ?").run(userId);
+    }
+
+    // ── Indexing ──────────────────────────────────────────────────────────────
 
     /**
      * Walk rcwDir and ingest any not-yet-indexed sections.
@@ -209,26 +288,39 @@ export class RcwDatabase {
         }
     }
 
+    // ── Queries ───────────────────────────────────────────────────────────────
+    //
+    // All query methods accept userId: number | null.
+    // null = unauthenticated guest — all sections appear as 'unread', setState is a no-op.
+    // We use userId ?? -1 as the LEFT JOIN key; -1 never matches a real user so all
+    // COALESCE(uss.state, 'unread') values resolve to 'unread' for guests.
+
     /**
      * Full-text search across heading and body text.
      * Returns up to `limit` results ordered by FTS rank.
      * Silently returns [] on invalid FTS5 query syntax.
      */
-    search(query: string, filter = "all", limit = 100): SearchResult[] {
+    search(query: string, filter = "all", limit = 100, userId: number | null = null): SearchResult[] {
+        const uid = userId ?? -1;
         const seen = new Set<string>();
         const results: SearchResult[] = [];
 
         // ID substring match — only runs when query looks like a cite (e.g. "69.50.401")
         if (/^[\d.]+$/.test(query)) {
             try {
-                const idClauses: string[] = ["id LIKE ?"];
-                const idParams: any[] = [`%${query}%`];
-                if (filter !== "all") { idClauses.push("state = ?"); idParams.push(filter); }
+                const idClauses: string[] = ["s.id LIKE ?"];
+                const idParams: any[] = [uid, `%${query}%`];
+                if (filter !== "all") {
+                    idClauses.push("COALESCE(uss.state, 'unread') = ?");
+                    idParams.push(filter);
+                }
                 const idRows = this.db.prepare(`
-          SELECT id, rcw_title, chapter, heading, state, text FROM sections
+          SELECT s.id, s.rcw_title, s.chapter, s.heading, s.text,
+            COALESCE(uss.state, 'unread') as state
+          FROM sections s
+          LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
           WHERE ${idClauses.join(" AND ")}
-          ORDER BY sort_order
-          LIMIT ?
+          ORDER BY s.sort_order LIMIT ?
         `).all(...idParams, limit) as any[];
                 for (const r of idRows) {
                     seen.add(r.id);
@@ -247,9 +339,9 @@ export class RcwDatabase {
         // FTS full-text search
         try {
             const clauses: string[] = ["sections_fts MATCH ?"];
-            const params: any[] = [query];
+            const params: any[] = [uid, query];
             if (filter !== "all") {
-                clauses.push("s.state = ?");
+                clauses.push("COALESCE(uss.state, 'unread') = ?");
                 params.push(filter);
             }
             const rows = this.db.prepare(`
@@ -258,10 +350,11 @@ export class RcwDatabase {
           s.rcw_title,
           s.chapter,
           s.heading,
-          s.state,
+          COALESCE(uss.state, 'unread') as state,
           snippet(sections_fts, 2, '<mark>', '</mark>', '…', 24) AS snippet
         FROM sections_fts
         JOIN sections s ON s.rowid = sections_fts.rowid
+        LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
         WHERE ${clauses.join(" AND ")}
         ORDER BY rank
         LIMIT ?
@@ -284,10 +377,15 @@ export class RcwDatabase {
         return results.slice(0, limit);
     }
 
-    getSection(cite: string): SectionRow | null {
-        const row = this.db
-            .prepare("SELECT id, rcw_title, chapter, heading, text, state FROM sections WHERE id = ?")
-            .get(cite) as any;
+    getSection(cite: string, userId: number | null = null): SectionRow | null {
+        const uid = userId ?? -1;
+        const row = this.db.prepare(`
+      SELECT s.id, s.rcw_title, s.chapter, s.heading, s.text,
+        COALESCE(uss.state, 'unread') as state
+      FROM sections s
+      LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
+      WHERE s.id = ?
+    `).get(uid, cite) as any;
         if (!row) return null;
         return {
             id: row.id,
@@ -299,92 +397,113 @@ export class RcwDatabase {
         };
     }
 
-    setState(cite: string, state: ReadState): void {
-        this.db.prepare("UPDATE sections SET state = ? WHERE id = ?").run(state, cite);
+    setState(cite: string, state: ReadState, userId: number): void {
+        if (state === "unread") {
+            this.db.prepare(
+                "DELETE FROM user_section_state WHERE user_id = ? AND section_id = ?"
+            ).run(userId, cite);
+        } else {
+            this.db.prepare(
+                "INSERT OR REPLACE INTO user_section_state (user_id, section_id, state) VALUES (?, ?, ?)"
+            ).run(userId, cite, state);
+        }
     }
 
-    getStats(): { total: number; read: number; skipped: number; unread: number } {
+    getStats(userId: number | null): { total: number; read: number; skipped: number; unread: number } {
+        if (userId === null) {
+            const row = this.db.prepare("SELECT COUNT(*) as total FROM sections").get() as any;
+            return { total: row.total, read: 0, skipped: 0, unread: row.total };
+        }
         const row = this.db.prepare(`
       SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN state = 'read'    THEN 1 ELSE 0 END) as read,
-        SUM(CASE WHEN state = 'skipped' THEN 1 ELSE 0 END) as skipped
-      FROM sections
-    `).get() as any;
+        SUM(CASE WHEN uss.state = 'read'    THEN 1 ELSE 0 END) as read,
+        SUM(CASE WHEN uss.state = 'skipped' THEN 1 ELSE 0 END) as skipped
+      FROM sections s
+      LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
+    `).get(userId) as any;
         return {
             total: row.total,
-            read: row.read,
-            skipped: row.skipped,
-            unread: row.total - row.read - row.skipped,
+            read: row.read ?? 0,
+            skipped: row.skipped ?? 0,
+            unread: row.total - (row.read ?? 0) - (row.skipped ?? 0),
         };
     }
 
-    getTitleStats(filter: string, search: string): TitleStats[] {
+    getTitleStats(filter: string, search: string, userId: number | null): TitleStats[] {
+        const uid = userId ?? -1;
         const clauses: string[] = [];
-        const params: any[] = [];
-        if (filter !== "all") { clauses.push("state = ?"); params.push(filter); }
-        if (search) { clauses.push("(id LIKE ? OR heading LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+        const params: any[] = [uid];
+        if (filter !== "all") { clauses.push("COALESCE(uss.state, 'unread') = ?"); params.push(filter); }
+        if (search) { clauses.push("(s.id LIKE ? OR s.heading LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
         const where = clauses.length ? "WHERE " + clauses.join(" AND ") : "";
 
         const rows = this.db.prepare(`
       SELECT
-        rcw_title,
-        SUM(CASE WHEN state = 'read'    THEN 1 ELSE 0 END) as read,
-        SUM(CASE WHEN state = 'skipped' THEN 1 ELSE 0 END) as skipped,
+        s.rcw_title,
+        SUM(CASE WHEN uss.state = 'read'    THEN 1 ELSE 0 END) as read,
+        SUM(CASE WHEN uss.state = 'skipped' THEN 1 ELSE 0 END) as skipped,
         COUNT(*) as total
-      FROM sections ${where}
-      GROUP BY rcw_title
+      FROM sections s
+      LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
+      ${where}
+      GROUP BY s.rcw_title
     `).all(...params) as any[];
 
         return rows
             .map((r) => ({
                 rcwTitle: r.rcw_title,
-                read: r.read,
-                skipped: r.skipped,
+                read: r.read ?? 0,
+                skipped: r.skipped ?? 0,
                 total: r.total,
-                unread: r.total - r.read - r.skipped,
+                unread: r.total - (r.read ?? 0) - (r.skipped ?? 0),
             }))
             .sort((a, b) => naturalSort(a.rcwTitle, b.rcwTitle));
     }
 
-    getChapterStats(rcwTitle: string, filter: string, search: string): ChapterStats[] {
-        const clauses: string[] = ["rcw_title = ?"];
-        const params: any[] = [rcwTitle];
-        if (filter !== "all") { clauses.push("state = ?"); params.push(filter); }
-        if (search) { clauses.push("(id LIKE ? OR heading LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+    getChapterStats(rcwTitle: string, filter: string, search: string, userId: number | null): ChapterStats[] {
+        const uid = userId ?? -1;
+        const clauses: string[] = ["s.rcw_title = ?"];
+        const params: any[] = [uid, rcwTitle];
+        if (filter !== "all") { clauses.push("COALESCE(uss.state, 'unread') = ?"); params.push(filter); }
+        if (search) { clauses.push("(s.id LIKE ? OR s.heading LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
 
         const rows = this.db.prepare(`
       SELECT
-        chapter,
-        SUM(CASE WHEN state = 'read'    THEN 1 ELSE 0 END) as read,
-        SUM(CASE WHEN state = 'skipped' THEN 1 ELSE 0 END) as skipped,
+        s.chapter,
+        SUM(CASE WHEN uss.state = 'read'    THEN 1 ELSE 0 END) as read,
+        SUM(CASE WHEN uss.state = 'skipped' THEN 1 ELSE 0 END) as skipped,
         COUNT(*) as total
-      FROM sections
+      FROM sections s
+      LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
       WHERE ${clauses.join(" AND ")}
-      GROUP BY chapter
+      GROUP BY s.chapter
     `).all(...params) as any[];
 
         return rows
             .map((r) => ({
                 chapter: r.chapter,
-                read: r.read,
-                skipped: r.skipped,
+                read: r.read ?? 0,
+                skipped: r.skipped ?? 0,
                 total: r.total,
-                unread: r.total - r.read - r.skipped,
+                unread: r.total - (r.read ?? 0) - (r.skipped ?? 0),
             }))
             .sort((a, b) => naturalSort(a.chapter, b.chapter));
     }
 
-    getSectionList(rcwTitle: string, chapter: string, filter: string, search: string): SectionInfo[] {
-        const clauses: string[] = ["rcw_title = ?", "chapter = ?"];
-        const params: any[] = [rcwTitle, chapter];
-        if (filter !== "all") { clauses.push("state = ?"); params.push(filter); }
-        if (search) { clauses.push("(id LIKE ? OR heading LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+    getSectionList(rcwTitle: string, chapter: string, filter: string, search: string, userId: number | null): SectionInfo[] {
+        const uid = userId ?? -1;
+        const clauses: string[] = ["s.rcw_title = ?", "s.chapter = ?"];
+        const params: any[] = [uid, rcwTitle, chapter];
+        if (filter !== "all") { clauses.push("COALESCE(uss.state, 'unread') = ?"); params.push(filter); }
+        if (search) { clauses.push("(s.id LIKE ? OR s.heading LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
 
         const rows = this.db.prepare(`
-      SELECT id, heading, state FROM sections
+      SELECT s.id, s.heading, COALESCE(uss.state, 'unread') as state
+      FROM sections s
+      LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
       WHERE ${clauses.join(" AND ")}
-      ORDER BY sort_order
+      ORDER BY s.sort_order
     `).all(...params) as any[];
 
         return rows.map((r) => ({
@@ -395,21 +514,28 @@ export class RcwDatabase {
     }
 
     /** First unread section in traversal order, optionally after a given cite. */
-    nextUnread(afterCite?: string): string | null {
+    nextUnread(afterCite?: string, userId: number | null = null): string | null {
+        const uid = userId ?? -1;
         if (afterCite) {
             const cur = this.db
                 .prepare("SELECT sort_order FROM sections WHERE id = ?")
                 .get(afterCite) as any;
             if (cur) {
-                const next = this.db.prepare(
-                    "SELECT id FROM sections WHERE state = 'unread' AND sort_order > ? ORDER BY sort_order LIMIT 1"
-                ).get(cur.sort_order) as any;
+                const next = this.db.prepare(`
+          SELECT s.id FROM sections s
+          LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
+          WHERE COALESCE(uss.state, 'unread') = 'unread' AND s.sort_order > ?
+          ORDER BY s.sort_order LIMIT 1
+        `).get(uid, cur.sort_order) as any;
                 if (next) return next.id;
             }
         }
-        const row = this.db
-            .prepare("SELECT id FROM sections WHERE state = 'unread' ORDER BY sort_order LIMIT 1")
-            .get() as any;
+        const row = this.db.prepare(`
+      SELECT s.id FROM sections s
+      LEFT JOIN user_section_state uss ON uss.section_id = s.id AND uss.user_id = ?
+      WHERE COALESCE(uss.state, 'unread') = 'unread'
+      ORDER BY s.sort_order LIMIT 1
+    `).get(uid) as any;
         return row?.id ?? null;
     }
 

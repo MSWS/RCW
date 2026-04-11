@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RCW — Index</title>
   <style>
+    html { scrollbar-gutter: stable; }
     *,
     *::before,
     *::after {
@@ -35,12 +36,16 @@
       --radius: 8px;
     }
 
+    html, body { height: 100%; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg);
       color: var(--text);
       font-size: 14px;
       line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
     }
 
     /* ── Nav ── */
@@ -50,10 +55,12 @@
       display: flex;
       align-items: center;
       height: 48px;
+      min-height: 48px;
       gap: 1.5rem;
       position: sticky;
       top: 0;
       z-index: 100;
+      width: 100%;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
@@ -87,8 +94,10 @@
     /* ── Page ── */
     .page {
       max-width: 920px;
+      width: 100%;
       margin: 0 auto;
       padding: 2rem 1.25rem;
+      flex: 1;
     }
 
     /* ── Stats card ── */
@@ -577,6 +586,8 @@
     <span class="nav-brand">RCW</span>
     <a href="/">Reader</a>
     <a href="/index" class="active">Index</a>
+    <span style="flex:1"></span>
+    <span id="nav-auth" style="display:flex;align-items:center;gap:1rem"></span>
   </nav>
 
   <div class="page">
@@ -618,6 +629,47 @@
     var openTitles = new Set();
     var openChapters = new Set();
     var searchMode = false;
+    var IS_GUEST = true; // updated by /api/me response
+
+    // ── Guest localStorage state ───────────────────────────────────────────────
+
+    function guestGetState() {
+      try { return JSON.parse(localStorage.getItem('rcw_guest_state') || '{}'); } catch { return {}; }
+    }
+
+    function guestSetState(cite, status) {
+      var gs = guestGetState();
+      if (status === 'unread') delete gs[cite];
+      else gs[cite] = status;
+      localStorage.setItem('rcw_guest_state', JSON.stringify(gs));
+    }
+
+    function effectiveState(cite, serverState) {
+      if (IS_GUEST) return guestGetState()[cite] || 'unread';
+      return serverState;
+    }
+
+    function guestOverlayTitleStats(titles) {
+      var gs = guestGetState();
+      var cites = Object.keys(gs);
+      return titles.map(function (t) {
+        var prefix = t.rcwTitle + '/';
+        var read    = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'read'; }).length;
+        var skipped = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'skipped'; }).length;
+        return Object.assign({}, t, { read: read, skipped: skipped, unread: t.total - read - skipped });
+      });
+    }
+
+    function guestOverlayChapterStats(rcwTitle, chapters) {
+      var gs = guestGetState();
+      var cites = Object.keys(gs);
+      return chapters.map(function (ch) {
+        var prefix  = rcwTitle + '/' + ch.chapter + '/';
+        var read    = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'read'; }).length;
+        var skipped = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'skipped'; }).length;
+        return Object.assign({}, ch, { read: read, skipped: skipped, unread: ch.total - read - skipped });
+      });
+    }
 
     // ── Utilities ──────────────────────────────────────────────────────────────
 
@@ -647,14 +699,15 @@
     }
 
     async function setStatus(cite, status) {
-      await fetch('/set-status', {
-        method: 'POST',
+      await fetch('/api/sections/' + encodeURIComponent(cite), {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cite: cite, status: status })
+        body: JSON.stringify({ state: status })
       });
     }
 
-    function makeBadge(cite, status) {
+    function makeBadge(cite, serverState) {
+      var status = effectiveState(cite, serverState);
       var wrap = document.createElement('span');
       wrap.innerHTML = badgeHTML(status);
       function attach() {
@@ -663,7 +716,11 @@
         badge.addEventListener('click', async function (e) {
           e.preventDefault();
           status = nextStatus(status);
-          await setStatus(cite, status);
+          if (IS_GUEST) {
+            guestSetState(cite, status);
+          } else {
+            await setStatus(cite, status);
+          }
           wrap.innerHTML = badgeHTML(status);
           attach();
           loadStats();
@@ -678,7 +735,14 @@
     async function loadStats() {
       var res = await fetch('/api/stats');
       var s = await res.json();
-      var p = (s.read / s.total * 100).toFixed(1);
+      if (IS_GUEST) {
+        var gs = guestGetState();
+        var vals = Object.values(gs);
+        s.read    = vals.filter(function(v) { return v === 'read'; }).length;
+        s.skipped = vals.filter(function(v) { return v === 'skipped'; }).length;
+        s.unread  = s.total - s.read - s.skipped;
+      }
+      var p = s.total > 0 ? (s.read / s.total * 100).toFixed(1) : '0.0';
       document.getElementById('stats-row').innerHTML =
         '<span><span class="stat-val stat-read">' + s.read.toLocaleString() + '</span> read</span>' +
         (s.skipped > 0 ? '<span><span class="stat-val stat-skip">' + s.skipped.toLocaleString() + '</span> skipped</span>' : '') +
@@ -784,6 +848,7 @@
       var params = new URLSearchParams({ filter: currentFilter, search: currentSearch });
       var res = await fetch('/api/toc?' + params);
       var titles = await res.json();
+      if (IS_GUEST) titles = guestOverlayTitleStats(titles);
 
       var empty = document.getElementById('empty');
       toc.innerHTML = '';
@@ -847,6 +912,7 @@
       var params = new URLSearchParams({ filter: currentFilter, search: currentSearch });
       var res = await fetch('/api/toc/' + encodeURIComponent(rcwTitle) + '?' + params);
       var chapters = await res.json();
+      if (IS_GUEST) chapters = guestOverlayChapterStats(rcwTitle, chapters);
       container.dataset.loaded = cacheKey;
       container.innerHTML = '';
 
@@ -968,9 +1034,30 @@
       }, 300);
     });
 
-    loadStats();
-    loadToc();
+    // ── Auth nav ───────────────────────────────────────────────────────────────
+
+    // Resolve auth state first so IS_GUEST is correct before any rendering
+    fetch('/api/me').then(function (r) {
+      var el = document.getElementById('nav-auth');
+      IS_GUEST = !r.ok;
+      if (r.ok) {
+        r.json().then(function (me) {
+          el.innerHTML =
+            '<a href="/account" style="color:rgba(255,255,255,0.8);font-size:0.85rem;text-decoration:none">' + me.username + '</a>' +
+            '<a href="/logout">Log out</a>';
+        });
+      } else {
+        el.innerHTML = '<a href="/login">Log in</a><a href="/signup">Sign up</a>';
+      }
+      loadStats();
+      loadToc();
+    });
   </script>
+<footer style="border-top:1px solid #e0dbd2;padding:1.25rem 1rem;display:flex;justify-content:center;gap:2rem;font-size:0.82rem;flex-wrap:wrap;margin-top:auto">
+  <a href="/about" style="color:#6b6b65;text-decoration:none">About</a>
+  <a href="https://msws.xyz/s/donate" style="color:#6b6b65;text-decoration:none">Donate</a>
+  <a href="https://git.msws.xyz/MS/RCW" style="color:#6b6b65;text-decoration:none">Source</a>
+</footer>
 </body>
 
 </html>
