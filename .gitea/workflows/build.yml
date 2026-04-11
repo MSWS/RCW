@@ -24,7 +24,7 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm \
-            -v "${{ gitea.workspace }}/src:/app/src" \
+            -v "./src:/app/src" \
             -w /app/src \
             oven/bun:1-alpine \
             bun test
