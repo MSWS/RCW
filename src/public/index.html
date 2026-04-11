@@ -1034,8 +1034,7 @@
       if (r.ok) {
         r.json().then(function (me) {
           el.innerHTML =
-            '<span style="color:rgba(255,255,255,0.8);font-size:0.85rem">' + me.username + '</span>' +
-            '<a href="/account">Account</a>' +
+            '<a href="/account" style="color:rgba(255,255,255,0.8);font-size:0.85rem;text-decoration:none">' + me.username + '</a>' +
             '<a href="/logout">Log out</a>';
           var fr = document.getElementById('footer-reset');
           fr.href = '/account#reset';
@@ -1054,6 +1053,8 @@
     });
   </script>
 <footer style="max-width:920px;margin:2rem auto 0;padding:1rem 1.25rem;border-top:1px solid #e0dbd2;display:flex;gap:1rem;font-size:0.82rem;flex-wrap:wrap">
+  <a href="/about" style="color:#1e4080;text-decoration:none">About</a>
+  <span style="color:#d0ccc4">·</span>
   <a href="https://msws.xyz/s/donate" style="color:#1e4080;text-decoration:none">Donate</a>
   <span style="color:#d0ccc4">·</span>
   <a href="https://git.msws.xyz/MS/RCW" style="color:#1e4080;text-decoration:none">Source</a>

@@ -47,7 +47,8 @@ const baseStyle = `
   .nav a:hover { color: white; }
   .nav a.active { color: white; border-bottom-color: rgba(255,255,255,0.7); }
   .nav .nav-spacer { flex: 1; }
-  .nav .nav-user { color: rgba(255,255,255,0.7); font-size: 0.85rem; }
+  .nav .nav-user { color: rgba(255,255,255,0.8); font-size: 0.85rem; border-bottom: none; }
+  .nav .nav-user:hover { color: white; text-decoration: underline; }
   .page { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem; }
   button { padding: 0.4rem 1rem; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; font-size: 0.9rem; font-family: inherit; }
   button.primary { background: #1e4080; color: #fff; border-color: #1e4080; }
@@ -66,7 +67,7 @@ function esc(s: string): string {
 
 function navBar(username: string | null, active?: string): string {
   const auth = username
-    ? `<span class="nav-user">${esc(username)}</span><a href="/logout">Log out</a>`
+    ? `<a href="/account" class="nav-user">${esc(username)}</a><a href="/logout">Log out</a>`
     : `<a href="/login"${active === "login" ? ' class="active"' : ""}>Log in</a><a href="/signup"${active === "signup" ? ' class="active"' : ""}>Sign up</a>`;
   return `<nav class="nav"><span class="nav-brand">RCW</span><a href="/"${active === "reader" ? ' class="active"' : ""}>Reader</a><a href="/index"${active === "index" ? ' class="active"' : ""}>Index</a><span class="nav-spacer"></span>${auth}</nav>`;
 }
@@ -268,14 +269,75 @@ ${navBar(null, isSignup ? "signup" : "login")}
 
 function siteFooter(username: string | null): string {
   const resetSection = username
-    ? `<span class="footer-sep">·</span><a href="/account#reset">Reset progress</a><span class="footer-sep">·</span><a href="/account">Account</a>`
+    ? `<span class="footer-sep">·</span><a href="/account#reset">Reset progress</a>`
     : `<span class="footer-sep">·</span><a href="#" onclick="if(confirm('Reset all local reading progress?')){localStorage.removeItem('rcw_guest_state');localStorage.removeItem('rcw_guest_last');window.location.href='/';}return false;">Reset progress</a>`;
   return `<footer>
+  <a href="/about">About</a>
+  <span class="footer-sep">·</span>
   <a href="https://msws.xyz/s/donate">Donate</a>
   <span class="footer-sep">·</span>
   <a href="https://git.msws.xyz/MS/RCW">Source</a>
   ${resetSection}
 </footer>`;
+}
+
+function aboutPage(username: string | null): string {
+  const s = db.getStats(null);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About — RCW Reader</title>
+<style>
+  ${baseStyle}
+  .page h1 { font-size: 1.4rem; font-weight: 700; color: #1c1c1a; margin-bottom: 0.4rem; }
+  .page .subtitle { font-size: 0.9rem; color: #6b6b65; margin-bottom: 2rem; }
+  .about-card { background: #fff; border: 1px solid #e0dbd2; border-radius: 10px; padding: 1.5rem 1.75rem; margin-bottom: 1.25rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .about-card h2 { font-size: 0.95rem; font-weight: 700; color: #1e4080; margin-bottom: 0.75rem; }
+  .about-card p { font-size: 0.9rem; color: #3a3a38; line-height: 1.7; margin-bottom: 0.6rem; }
+  .about-card p:last-child { margin-bottom: 0; }
+  .about-card a { color: #1e4080; }
+  .stat-highlight { display: inline-flex; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+  .stat-highlight span { font-size: 0.85rem; color: #6b6b65; }
+  .stat-highlight strong { color: #1c1c1a; }
+</style>
+</head>
+<body>
+${navBar(username)}
+<div class="page">
+  <h1>RCW Reader</h1>
+  <p class="subtitle">A personal reading tracker for the Revised Code of Washington</p>
+
+  <div class="about-card">
+    <h2>What is this?</h2>
+    <p>RCW Reader is a tool for reading through the <strong>Revised Code of Washington</strong> — the body of state law that governs Washington State. The RCW contains thousands of individual statutes organized into titles and chapters.</p>
+    <p>This site lets you read through every section at your own pace, tracking what you've read, skipping sections you don't need, and picking up right where you left off.</p>
+    <div class="stat-highlight">
+      <span><strong>${s.total.toLocaleString()}</strong> sections indexed</span>
+    </div>
+  </div>
+
+  <div class="about-card">
+    <h2>How does it work?</h2>
+    <p>The reader presents one section at a time. After reading, you can mark it <strong>Read</strong> to advance to the next section, or <strong>Skip</strong> to set it aside and move on. Your progress is tracked so you can always resume where you left off.</p>
+    <p>The <strong>Index</strong> gives a full overview of all titles and chapters, with filters to find unread, read, or skipped sections. You can also search by keyword or section number (e.g. <em>69.50.401</em>).</p>
+  </div>
+
+  <div class="about-card">
+    <h2>Accounts &amp; guest access</h2>
+    <p>You can read without signing in — progress is saved locally in your browser. Create an account to sync your progress across devices and keep a permanent record.</p>
+  </div>
+
+  <div class="about-card">
+    <h2>Source &amp; attribution</h2>
+    <p>RCW text is sourced from the <a href="https://app.leg.wa.gov/rcw/" target="_blank" rel="noopener">Washington State Legislature</a>. This site is an independent project and is not affiliated with the state.</p>
+    <p>The source code is available at <a href="https://git.msws.xyz/MS/RCW" target="_blank" rel="noopener">git.msws.xyz/MS/RCW</a>. If you find it useful, consider <a href="https://msws.xyz/s/donate">donating</a>.</p>
+  </div>
+</div>
+${siteFooter(username)}
+</body>
+</html>`;
 }
 
 function accountPage(username: string, notice?: string, error?: string): string {
@@ -490,6 +552,12 @@ async function handle(req: Request): Promise<Response> {
       db.setState(cite, status as "unread" | "read" | "skipped", userId);
     }
     return jsonResp({ ok: true });
+  }
+
+  // ── About ──────────────────────────────────────────────────────────────────
+
+  if (url.pathname === "/about") {
+    return htmlResp(aboutPage(username));
   }
 
   // ── Account ────────────────────────────────────────────────────────────────
