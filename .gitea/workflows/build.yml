@@ -4,16 +4,8 @@ run-name: ${{ gitea.actor }}
 on:
   push:
     branches: [main, dev]
-    paths:
-      - 'Dockerfile'
-      - 'src/**'
-      - '**/build.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'Dockerfile'
-      - 'src/**'
-      - '**/build.yml'
 
 jobs:
   build:
