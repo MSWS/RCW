@@ -162,6 +162,9 @@ async function act(action) {
   window.location.href = '/';
 }
 
+// Clean up ?after= from URL bar without reloading
+if (location.search) history.replaceState(null, '', '/');
+
 // Update progress display for guests using localStorage
 if (IS_GUEST) {
   var gs = guestGetState();
