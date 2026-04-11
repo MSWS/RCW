@@ -12,6 +12,49 @@ const db = new RcwDatabase(DB_FILE);
 db.migrateFromJson(STATE_FILE); // no-op if already migrated or file absent
 db.index(RCW_DIR);
 
+// ── Logging ───────────────────────────────────────────────────────────────────
+
+function log(level: "INFO" | "WARN" | "FAIL", event: string, detail: string, req?: Request): void {
+  const ts = new Date().toISOString();
+  const ip = (req?.headers.get("X-Forwarded-For")?.split(",")[0] ?? req?.headers.get("X-Real-IP") ?? "unknown").trim();
+  console.log(`${ts} [${level}] ${event} ip=${ip} ${detail}`);
+}
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+
+const RATE_WINDOW_MS  = 15 * 60 * 1000; // 15 minutes
+const RATE_MAX_FAILS  = 10;              // max failed attempts per window
+
+interface RateEntry { count: number; windowStart: number; }
+const rateLimitMap = new Map<string, RateEntry>();
+
+function getRateLimitKey(req: Request): string {
+  return (req.headers.get("X-Forwarded-For")?.split(",")[0] ?? req.headers.get("X-Real-IP") ?? "unknown").trim();
+}
+
+function isRateLimited(req: Request): boolean {
+  const key = getRateLimitKey(req);
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) return false;
+  return entry.count >= RATE_MAX_FAILS;
+}
+
+function recordFailedAttempt(req: Request): void {
+  const key = getRateLimitKey(req);
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
+    rateLimitMap.set(key, { count: 1, windowStart: now });
+  } else {
+    entry.count++;
+  }
+}
+
+function clearRateLimit(req: Request): void {
+  rateLimitMap.delete(getRateLimitKey(req));
+}
+
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
 interface Session { userId: number; username: string; }
@@ -43,7 +86,7 @@ const baseStyle = `
   html { scrollbar-gutter: stable; }
   html, body { height: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1c1c1a; font-size: 14px; line-height: 1.5; display: flex; flex-direction: column; min-height: 100vh; }
-  .nav { background: #1e4080; padding: 0 1.5rem; display: flex; align-items: center; height: 48px; gap: 1.5rem; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  .nav { background: #1e4080; padding: 0 1.5rem; display: flex; align-items: center; height: 48px; min-height: 48px; gap: 1.5rem; position: sticky; top: 0; z-index: 100; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
   .nav-brand { font-weight: 700; font-size: 0.95rem; color: white; letter-spacing: 0.02em; }
   .nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.3rem 0; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
   .nav a:hover { color: white; }
@@ -449,13 +492,21 @@ async function handle(req: Request): Promise<Response> {
 
   if (url.pathname === "/login") {
     if (req.method === "POST") {
+      if (isRateLimited(req)) {
+        log("WARN", "LOGIN_BLOCKED", "rate limited", req);
+        return htmlResp(authPage("Log in", "/login", "Too many failed attempts. Please wait 15 minutes."));
+      }
       const form  = new URLSearchParams(await req.text());
       const uname = form.get("username")?.trim() ?? "";
       const pass  = form.get("password") ?? "";
       const user  = db.getUserByUsername(uname);
       if (!user || !(await Bun.password.verify(pass, user.passwordHash))) {
+        recordFailedAttempt(req);
+        log("FAIL", "LOGIN_FAIL", `user=${uname}`, req);
         return htmlResp(authPage("Log in", "/login", "Invalid username or password."));
       }
+      clearRateLimit(req);
+      log("INFO", "LOGIN_OK", `user=${user.username}`, req);
       const token = createSession(user.id, user.username);
       return new Response(null, {
         status: 302,
@@ -478,6 +529,7 @@ async function handle(req: Request): Promise<Response> {
         return htmlResp(authPage("Sign up", "/signup", "Username already taken."));
       const hash   = await Bun.password.hash(pass);
       const uid    = db.createUser(uname, hash);
+      log("INFO", "SIGNUP_OK", `user=${uname}`, req);
       const token  = createSession(uid, uname);
       return new Response(null, {
         status: 302,
@@ -488,6 +540,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (url.pathname === "/logout") {
+    log("INFO", "LOGOUT", `user=${username ?? "unknown"}`, req);
     deleteSession(req);
     return new Response(null, {
       status: 302,
@@ -579,14 +632,16 @@ async function handle(req: Request): Promise<Response> {
     const newUsername = form.get("new_username")?.trim() ?? "";
     const pass = form.get("password") ?? "";
     const user = db.getUserById(userId)!;
-    if (!(await Bun.password.verify(pass, user.passwordHash)))
+    if (!(await Bun.password.verify(pass, user.passwordHash))) {
+      log("FAIL", "ACCOUNT_USERNAME_FAIL", `user=${username}`, req);
       return htmlResp(accountPage(username, undefined, "Incorrect password."));
+    }
     if (newUsername.length < 1)
       return htmlResp(accountPage(username, undefined, "Username is required."));
     if (newUsername !== username && db.getUserByUsername(newUsername))
       return htmlResp(accountPage(username, undefined, "Username already taken."));
     db.updateUsername(userId, newUsername);
-    // Update session to reflect new username
+    log("INFO", "ACCOUNT_USERNAME_OK", `user=${username} new=${newUsername}`, req);
     const cookie = req.headers.get("Cookie") ?? "";
     const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
     if (match?.[1]) sessions.set(match[1], { userId, username: newUsername });
@@ -599,12 +654,15 @@ async function handle(req: Request): Promise<Response> {
     const currentPass = form.get("password") ?? "";
     const newPass = form.get("new_password") ?? "";
     const user = db.getUserById(userId)!;
-    if (!(await Bun.password.verify(currentPass, user.passwordHash)))
+    if (!(await Bun.password.verify(currentPass, user.passwordHash))) {
+      log("FAIL", "ACCOUNT_PASSWORD_FAIL", `user=${username}`, req);
       return htmlResp(accountPage(username, undefined, "Incorrect current password."));
+    }
     if (newPass.length < 1)
       return htmlResp(accountPage(username, undefined, "New password is required."));
     const newHash = await Bun.password.hash(newPass);
     db.updatePassword(userId, newHash);
+    log("INFO", "ACCOUNT_PASSWORD_OK", `user=${username}`, req);
     return htmlResp(accountPage(username, "Password updated."));
   }
 
@@ -613,9 +671,12 @@ async function handle(req: Request): Promise<Response> {
     const form = new URLSearchParams(await req.text());
     const pass = form.get("password") ?? "";
     const user = db.getUserById(userId)!;
-    if (!(await Bun.password.verify(pass, user.passwordHash)))
+    if (!(await Bun.password.verify(pass, user.passwordHash))) {
+      log("FAIL", "ACCOUNT_RESET_FAIL", `user=${username}`, req);
       return htmlResp(accountPage(username, undefined, "Incorrect password — progress not reset."));
+    }
     db.resetProgress(userId);
+    log("INFO", "ACCOUNT_RESET_OK", `user=${username}`, req);
     deleteSession(req);
     return new Response(null, {
       status: 302,
