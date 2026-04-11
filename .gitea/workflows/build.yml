@@ -25,9 +25,9 @@ jobs:
         run: |
           docker run --rm \
             -v "$(pwd)/src:/app/src:ro" \
-            -w /app \
+            -w /app/src \
             oven/bun:1-alpine \
-            bun test ./src
+            bun test
 
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3
