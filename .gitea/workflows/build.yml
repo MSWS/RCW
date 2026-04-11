@@ -23,7 +23,11 @@ jobs:
 
       - name: Run tests
         run: |
-          tar -c src/ | docker run --rm -i -w /app oven/bun:1-alpine sh -c "tar x && bun test src"
+          docker run --rm \
+	            -v "$(pwd)/src:/app/src:ro" \
+	            -w /app \
+	            oven/bun:1-alpine \
+              bun test src
 
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3
