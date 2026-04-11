@@ -23,14 +23,11 @@ jobs:
 
       - name: Run tests
         run: |
-          echo "pwd: $(pwd)"
-          echo "src contents:"
-          ls -la src/
           docker run --rm \
             -v "$(pwd)/src:/app/src:ro" \
             -w /app/src \
             oven/bun:1-alpine \
-            sh -c "echo 'app contents:' && ls -la /app && echo 'src contents:' && ls -la /app/src && bun test src"
+            bun test
 
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3
