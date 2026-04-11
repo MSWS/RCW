@@ -577,6 +577,8 @@
     <span class="nav-brand">RCW</span>
     <a href="/">Reader</a>
     <a href="/index" class="active">Index</a>
+    <span style="flex:1"></span>
+    <span id="nav-auth" style="display:flex;align-items:center;gap:1rem"></span>
   </nav>
 
   <div class="page">
@@ -618,6 +620,25 @@
     var openTitles = new Set();
     var openChapters = new Set();
     var searchMode = false;
+    var IS_GUEST = true; // updated by /api/me response
+
+    // ── Guest localStorage state ───────────────────────────────────────────────
+
+    function guestGetState() {
+      try { return JSON.parse(localStorage.getItem('rcw_guest_state') || '{}'); } catch { return {}; }
+    }
+
+    function guestSetState(cite, status) {
+      var gs = guestGetState();
+      if (status === 'unread') delete gs[cite];
+      else gs[cite] = status;
+      localStorage.setItem('rcw_guest_state', JSON.stringify(gs));
+    }
+
+    function effectiveState(cite, serverState) {
+      if (IS_GUEST) return guestGetState()[cite] || 'unread';
+      return serverState;
+    }
 
     // ── Utilities ──────────────────────────────────────────────────────────────
 
@@ -654,7 +675,8 @@
       });
     }
 
-    function makeBadge(cite, status) {
+    function makeBadge(cite, serverState) {
+      var status = effectiveState(cite, serverState);
       var wrap = document.createElement('span');
       wrap.innerHTML = badgeHTML(status);
       function attach() {
@@ -663,7 +685,11 @@
         badge.addEventListener('click', async function (e) {
           e.preventDefault();
           status = nextStatus(status);
-          await setStatus(cite, status);
+          if (IS_GUEST) {
+            guestSetState(cite, status);
+          } else {
+            await setStatus(cite, status);
+          }
           wrap.innerHTML = badgeHTML(status);
           attach();
           loadStats();
@@ -678,7 +704,14 @@
     async function loadStats() {
       var res = await fetch('/api/stats');
       var s = await res.json();
-      var p = (s.read / s.total * 100).toFixed(1);
+      if (IS_GUEST) {
+        var gs = guestGetState();
+        var vals = Object.values(gs);
+        s.read    = vals.filter(function(v) { return v === 'read'; }).length;
+        s.skipped = vals.filter(function(v) { return v === 'skipped'; }).length;
+        s.unread  = s.total - s.read - s.skipped;
+      }
+      var p = s.total > 0 ? (s.read / s.total * 100).toFixed(1) : '0.0';
       document.getElementById('stats-row').innerHTML =
         '<span><span class="stat-val stat-read">' + s.read.toLocaleString() + '</span> read</span>' +
         (s.skipped > 0 ? '<span><span class="stat-val stat-skip">' + s.skipped.toLocaleString() + '</span> skipped</span>' : '') +
@@ -966,6 +999,24 @@
           loadToc();
         }
       }, 300);
+    });
+
+    // ── Auth nav ───────────────────────────────────────────────────────────────
+
+    fetch('/api/me').then(function (r) {
+      var el = document.getElementById('nav-auth');
+      if (r.ok) {
+        IS_GUEST = false;
+        r.json().then(function (me) {
+          el.innerHTML =
+            '<span style="color:rgba(255,255,255,0.8);font-size:0.85rem">' + me.username + '</span>' +
+            '<a href="/logout">Log out</a>';
+        });
+      } else {
+        IS_GUEST = true;
+        el.innerHTML = '<a href="/login">Log in</a><a href="/signup">Sign up</a>';
+        loadStats(); // re-render stats now that we know we're a guest
+      }
     });
 
     loadStats();
