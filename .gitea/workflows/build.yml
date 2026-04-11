@@ -27,8 +27,7 @@ jobs:
             -v "$(pwd)/src:/app/src:ro" \
             -w /app \
             oven/bun:1-alpine \
-            bun init -y && \
-            bun test src
+            sh -c "bun init -y && bun test src"
 
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3
