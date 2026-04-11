@@ -23,6 +23,9 @@ jobs:
 
       - name: Run tests
         run: |
+          echo "pwd: $(pwd)"
+          echo "src contents:"
+          ls -la src/
           docker run --rm \
             -v "$(pwd)/src:/app/src:ro" \
             -w /app/src \
