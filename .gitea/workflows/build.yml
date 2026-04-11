@@ -6,17 +6,13 @@ on:
     branches: [main, dev]
     paths:
       - 'Dockerfile'
-      - 'server.ts'
-      - 'database.ts'
-      - 'public/**'
+      - 'src/**'
       - '**/build.yml'
   pull_request:
     branches: [main]
     paths:
       - 'Dockerfile'
-      - 'server.ts'
-      - 'database.ts'
-      - 'public/**'
+      - 'src/**'
       - '**/build.yml'
 
 jobs:
@@ -24,6 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Run tests
+        run: |
+          docker run --rm \
+            -v "$(pwd)/src:/app/src:ro" \
+            -w /app \
+            oven/bun:1-alpine \
+            bun test src
 
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3

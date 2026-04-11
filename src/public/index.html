@@ -640,6 +640,28 @@
       return serverState;
     }
 
+    function guestOverlayTitleStats(titles) {
+      var gs = guestGetState();
+      var cites = Object.keys(gs);
+      return titles.map(function (t) {
+        var prefix = t.rcwTitle + '/';
+        var read    = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'read'; }).length;
+        var skipped = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'skipped'; }).length;
+        return Object.assign({}, t, { read: read, skipped: skipped, unread: t.total - read - skipped });
+      });
+    }
+
+    function guestOverlayChapterStats(rcwTitle, chapters) {
+      var gs = guestGetState();
+      var cites = Object.keys(gs);
+      return chapters.map(function (ch) {
+        var prefix  = rcwTitle + '/' + ch.chapter + '/';
+        var read    = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'read'; }).length;
+        var skipped = cites.filter(function (c) { return c.startsWith(prefix) && gs[c] === 'skipped'; }).length;
+        return Object.assign({}, ch, { read: read, skipped: skipped, unread: ch.total - read - skipped });
+      });
+    }
+
     // ── Utilities ──────────────────────────────────────────────────────────────
 
     function segBar(read, skipped, total, sm) {
@@ -817,6 +839,7 @@
       var params = new URLSearchParams({ filter: currentFilter, search: currentSearch });
       var res = await fetch('/api/toc?' + params);
       var titles = await res.json();
+      if (IS_GUEST) titles = guestOverlayTitleStats(titles);
 
       var empty = document.getElementById('empty');
       toc.innerHTML = '';
@@ -880,6 +903,7 @@
       var params = new URLSearchParams({ filter: currentFilter, search: currentSearch });
       var res = await fetch('/api/toc/' + encodeURIComponent(rcwTitle) + '?' + params);
       var chapters = await res.json();
+      if (IS_GUEST) chapters = guestOverlayChapterStats(rcwTitle, chapters);
       container.dataset.loaded = cacheKey;
       container.innerHTML = '';
 
@@ -1003,24 +1027,22 @@
 
     // ── Auth nav ───────────────────────────────────────────────────────────────
 
+    // Resolve auth state first so IS_GUEST is correct before any rendering
     fetch('/api/me').then(function (r) {
       var el = document.getElementById('nav-auth');
+      IS_GUEST = !r.ok;
       if (r.ok) {
-        IS_GUEST = false;
         r.json().then(function (me) {
           el.innerHTML =
             '<span style="color:rgba(255,255,255,0.8);font-size:0.85rem">' + me.username + '</span>' +
             '<a href="/logout">Log out</a>';
         });
       } else {
-        IS_GUEST = true;
         el.innerHTML = '<a href="/login">Log in</a><a href="/signup">Sign up</a>';
-        loadStats(); // re-render stats now that we know we're a guest
       }
+      loadStats();
+      loadToc();
     });
-
-    loadStats();
-    loadToc();
   </script>
 </body>
 
