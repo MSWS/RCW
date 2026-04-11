@@ -1,17 +1,5 @@
 import { RcwDatabase, type SectionRow } from "./database";
 
-const RCW_DIR    = process.env.RCW_DIR    ?? "/rcw";
-const STATE_FILE = process.env.STATE_FILE ?? "/data/rcw_reader_state.json"; // only used for one-time migration
-const DB_FILE    = process.env.DB_FILE    ?? "/data/rcw.db";
-const PORT       = Number(process.env.PORT ?? 3000);
-
-const db = new RcwDatabase(DB_FILE);
-
-// ── Startup ──────────────────────────────────────────────────────────────────
-
-db.migrateFromJson(STATE_FILE); // no-op if already migrated or file absent
-db.index(RCW_DIR);
-
 // ── Logging ───────────────────────────────────────────────────────────────────
 
 function log(level: "INFO" | "WARN" | "FAIL", event: string, detail: string, req?: Request): void {
@@ -22,64 +10,67 @@ function log(level: "INFO" | "WARN" | "FAIL", event: string, detail: string, req
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 
-const RATE_WINDOW_MS  = 15 * 60 * 1000; // 15 minutes
-const RATE_MAX_FAILS  = 10;              // max failed attempts per window
+const RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+export const RATE_MAX_FAILS = 10;       // exported for tests
 
 interface RateEntry { count: number; windowStart: number; }
-const rateLimitMap = new Map<string, RateEntry>();
 
-function getRateLimitKey(req: Request): string {
-  return (req.headers.get("X-Forwarded-For")?.split(",")[0] ?? req.headers.get("X-Real-IP") ?? "unknown").trim();
-}
+function makeRateLimiter() {
+  const map = new Map<string, RateEntry>();
 
-function isRateLimited(req: Request): boolean {
-  const key = getRateLimitKey(req);
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) return false;
-  return entry.count >= RATE_MAX_FAILS;
-}
-
-function recordFailedAttempt(req: Request): void {
-  const key = getRateLimitKey(req);
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
-    rateLimitMap.set(key, { count: 1, windowStart: now });
-  } else {
-    entry.count++;
+  function key(req: Request): string {
+    return (req.headers.get("X-Forwarded-For")?.split(",")[0] ?? req.headers.get("X-Real-IP") ?? "unknown").trim();
   }
-}
-
-function clearRateLimit(req: Request): void {
-  rateLimitMap.delete(getRateLimitKey(req));
+  return {
+    isLimited(req: Request): boolean {
+      const entry = map.get(key(req));
+      if (!entry || Date.now() - entry.windowStart > RATE_WINDOW_MS) return false;
+      return entry.count >= RATE_MAX_FAILS;
+    },
+    recordFail(req: Request): void {
+      const k = key(req);
+      const now = Date.now();
+      const entry = map.get(k);
+      if (!entry || now - entry.windowStart > RATE_WINDOW_MS) map.set(k, { count: 1, windowStart: now });
+      else entry.count++;
+    },
+    clear(req: Request): void { map.delete(key(req)); },
+  };
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
 interface Session { userId: number; username: string; }
-const sessions = new Map<string, Session>();
 
-function getSession(req: Request): Session | null {
-  const cookie = req.headers.get("Cookie") ?? "";
-  const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!match?.[1]) return null;
-  return sessions.get(match[1]) ?? null;
+function makeSessions() {
+  const map = new Map<string, Session>();
+
+  function tokenFrom(req: Request): string | null {
+    const match = (req.headers.get("Cookie") ?? "").match(/(?:^|;\s*)session=([^;]+)/);
+    return match?.[1] ?? null;
+  }
+  return {
+    get(req: Request): Session | null { const t = tokenFrom(req); return t ? (map.get(t) ?? null) : null; },
+    create(userId: number, username: string): string {
+      const token = crypto.randomUUID();
+      map.set(token, { userId, username });
+      return token;
+    },
+    update(req: Request, data: Partial<Session>): void {
+      const t = tokenFrom(req);
+      if (t) { const s = map.get(t); if (s) map.set(t, { ...s, ...data }); }
+    },
+    delete(req: Request): void { const t = tokenFrom(req); if (t) map.delete(t); },
+  };
 }
 
-function createSession(userId: number, username: string): string {
-  const token = crypto.randomUUID();
-  sessions.set(token, { userId, username });
-  return token;
-}
+// ── Handler factory ───────────────────────────────────────────────────────────
 
-function deleteSession(req: Request): void {
-  const cookie = req.headers.get("Cookie") ?? "";
-  const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
-  if (match?.[1]) sessions.delete(match[1]);
-}
+export function createHandler(db: RcwDatabase) {
+  const sessions = makeSessions();
+  const rate = makeRateLimiter();
 
-// ── HTML helpers ─────────────────────────────────────────────────────────────
+  // ── HTML helpers ───────────────────────────────────────────────────────────
 
 const baseStyle = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -489,16 +480,16 @@ function showMsg(msg, isError) {
 </html>`;
 }
 
-// ── Request handler ───────────────────────────────────────────────────────────
+  // ── Request handler ─────────────────────────────────────────────────────────
 
-async function handle(req: Request): Promise<Response> {
+  async function handle(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const htmlResp = (body: string) =>
     new Response(body, { headers: { "Content-Type": "text/html" } });
   const jsonResp = (data: unknown) =>
     new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
 
-  const session = getSession(req);
+  const session = sessions.get(req);
   const userId = session?.userId ?? null;
   const username = session?.username ?? null;
 
@@ -508,7 +499,7 @@ async function handle(req: Request): Promise<Response> {
 
   if (url.pathname === "/login") {
     if (req.method === "POST") {
-      if (isRateLimited(req)) {
+      if (rate.isLimited(req)) {
         log("WARN", "LOGIN_BLOCKED", "rate limited", req);
         return htmlResp(authPage("Log in", "/login", "Too many failed attempts. Please wait 15 minutes."));
       }
@@ -517,13 +508,13 @@ async function handle(req: Request): Promise<Response> {
       const pass  = form.get("password") ?? "";
       const user  = db.getUserByUsername(uname);
       if (!user || !(await Bun.password.verify(pass, user.passwordHash))) {
-        recordFailedAttempt(req);
+        rate.recordFail(req);
         log("FAIL", "LOGIN_FAIL", `user=${uname}`, req);
         return htmlResp(authPage("Log in", "/login", "Invalid username or password."));
       }
-      clearRateLimit(req);
+      rate.clear(req);
       log("INFO", "LOGIN_OK", `user=${user.username}`, req);
-      const token = createSession(user.id, user.username);
+      const token = sessions.create(user.id, user.username);
       return new Response(null, {
         status: 302,
         headers: { "Location": "/", "Set-Cookie": `session=${token}; HttpOnly; SameSite=Strict; Path=/` },
@@ -546,7 +537,7 @@ async function handle(req: Request): Promise<Response> {
       const hash   = await Bun.password.hash(pass);
       const uid    = db.createUser(uname, hash);
       log("INFO", "SIGNUP_OK", `user=${uname}`, req);
-      const token  = createSession(uid, uname);
+      const token  = sessions.create(uid, uname);
       return new Response(null, {
         status: 302,
         headers: { "Location": "/", "Set-Cookie": `session=${token}; HttpOnly; SameSite=Strict; Path=/` },
@@ -557,7 +548,7 @@ async function handle(req: Request): Promise<Response> {
 
   if (url.pathname === "/logout") {
     log("INFO", "LOGOUT", `user=${username ?? "unknown"}`, req);
-    deleteSession(req);
+    sessions.delete(req);
     return new Response(null, {
       status: 302,
       headers: {
@@ -649,9 +640,7 @@ async function handle(req: Request): Promise<Response> {
       return jsonResp({ error: "Username already taken." });
     db.updateUsername(userId, newUsername);
     log("INFO", "ACCOUNT_USERNAME_OK", `user=${username} new=${newUsername}`, req);
-    const cookie = req.headers.get("Cookie") ?? "";
-    const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
-    if (match?.[1]) sessions.set(match[1], { userId, username: newUsername });
+    sessions.update(req, { username: newUsername });
     return jsonResp({ notice: "Username updated." });
   }
 
@@ -679,7 +668,7 @@ async function handle(req: Request): Promise<Response> {
     }
     db.resetProgress(userId);
     log("INFO", "ACCOUNT_RESET_OK", `user=${username}`, req);
-    deleteSession(req);
+    sessions.delete(req);
     return new Response(JSON.stringify({ ok: true }), {
       headers: { "Content-Type": "application/json", "Set-Cookie": "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" },
     });
@@ -709,8 +698,22 @@ async function handle(req: Request): Promise<Response> {
     return htmlResp(readerPage(section, username, userId));
   }
 
-  return new Response("Not found", { status: 404 });
+    return new Response("Not found", { status: 404 });
+  }
+
+  return handle;
 }
 
-Bun.serve({ port: PORT, fetch: handle });
-console.log(`Listening on http://localhost:${PORT}`);
+if (import.meta.main) {
+  const RCW_DIR    = process.env.RCW_DIR    ?? "/rcw";
+  const STATE_FILE = process.env.STATE_FILE ?? "/data/rcw_reader_state.json";
+  const DB_FILE    = process.env.DB_FILE    ?? "/data/rcw.db";
+  const PORT       = Number(process.env.PORT ?? 3000);
+
+  const db = new RcwDatabase(DB_FILE);
+  db.migrateFromJson(STATE_FILE);
+  db.index(RCW_DIR);
+
+  Bun.serve({ port: PORT, fetch: createHandler(db) });
+  console.log(`Listening on http://localhost:${PORT}`);
+}
