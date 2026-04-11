@@ -35,12 +35,16 @@
       --radius: 8px;
     }
 
+    html, body { height: 100%; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg);
       color: var(--text);
       font-size: 14px;
       line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
     }
 
     /* ── Nav ── */
@@ -87,8 +91,10 @@
     /* ── Page ── */
     .page {
       max-width: 920px;
+      width: 100%;
       margin: 0 auto;
       padding: 2rem 1.25rem;
+      flex: 1;
     }
 
     /* ── Stats card ── */
@@ -1036,30 +1042,18 @@
           el.innerHTML =
             '<a href="/account" style="color:rgba(255,255,255,0.8);font-size:0.85rem;text-decoration:none">' + me.username + '</a>' +
             '<a href="/logout">Log out</a>';
-          var fr = document.getElementById('footer-reset');
-          fr.href = '/account#reset';
-          fr.removeAttribute('onclick');
-          fr.style.display = '';
         });
       } else {
         el.innerHTML = '<a href="/login">Log in</a><a href="/signup">Sign up</a>';
-        var fr = document.getElementById('footer-reset');
-        fr.href = '#';
-        fr.setAttribute('onclick', "if(confirm('Reset all local reading progress?')){localStorage.removeItem('rcw_guest_state');localStorage.removeItem('rcw_guest_last');window.location.href='/';}return false;");
-        fr.style.display = '';
       }
       loadStats();
       loadToc();
     });
   </script>
-<footer style="max-width:920px;margin:2rem auto 0;padding:1rem 1.25rem;border-top:1px solid #e0dbd2;display:flex;gap:1rem;font-size:0.82rem;flex-wrap:wrap">
-  <a href="/about" style="color:#1e4080;text-decoration:none">About</a>
-  <span style="color:#d0ccc4">·</span>
-  <a href="https://msws.xyz/s/donate" style="color:#1e4080;text-decoration:none">Donate</a>
-  <span style="color:#d0ccc4">·</span>
-  <a href="https://git.msws.xyz/MS/RCW" style="color:#1e4080;text-decoration:none">Source</a>
-  <span style="color:#d0ccc4">·</span>
-  <a href="#" id="footer-reset" style="color:#1e4080;text-decoration:none;display:none">Reset progress</a>
+<footer style="border-top:1px solid #e0dbd2;padding:1.25rem 1rem;display:flex;justify-content:center;gap:2rem;font-size:0.82rem;flex-wrap:wrap;margin-top:auto">
+  <a href="/about" style="color:#6b6b65;text-decoration:none">About</a>
+  <a href="https://msws.xyz/s/donate" style="color:#6b6b65;text-decoration:none">Donate</a>
+  <a href="https://git.msws.xyz/MS/RCW" style="color:#6b6b65;text-decoration:none">Source</a>
 </footer>
 </body>
 

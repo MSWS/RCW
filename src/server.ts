@@ -40,7 +40,8 @@ function deleteSession(req: Request): void {
 
 const baseStyle = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1c1c1a; font-size: 14px; line-height: 1.5; }
+  html, body { height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1c1c1a; font-size: 14px; line-height: 1.5; display: flex; flex-direction: column; min-height: 100vh; }
   .nav { background: #1e4080; padding: 0 1.5rem; display: flex; align-items: center; height: 48px; gap: 1.5rem; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
   .nav-brand { font-weight: 700; font-size: 0.95rem; color: white; letter-spacing: 0.02em; }
   .nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.3rem 0; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
@@ -49,16 +50,16 @@ const baseStyle = `
   .nav .nav-spacer { flex: 1; }
   .nav .nav-user { color: rgba(255,255,255,0.8); font-size: 0.85rem; border-bottom: none; }
   .nav .nav-user:hover { color: white; text-decoration: underline; }
-  .page { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem; }
+  .page { max-width: 960px; width: 100%; margin: 0 auto; padding: 2rem 1.25rem; flex: 1; }
   button { padding: 0.4rem 1rem; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; font-size: 0.9rem; font-family: inherit; }
   button.primary { background: #1e4080; color: #fff; border-color: #1e4080; }
   button:hover { filter: brightness(0.93); }
   progress { width: 100%; height: 6px; margin-bottom: 1rem; }
   .meta { font-size: 0.8rem; color: #888; margin-bottom: 1.5rem; }
-  footer { max-width: 960px; margin: 2rem auto 0; padding: 1rem 1.25rem; border-top: 1px solid #e0dbd2; display: flex; gap: 1rem; font-size: 0.82rem; flex-wrap: wrap; }
-  footer a { color: #1e4080; text-decoration: none; }
-  footer a:hover { text-decoration: underline; }
-  .footer-sep { color: #d0ccc4; }
+  footer { border-top: 1px solid #e0dbd2; padding: 1.25rem 1rem; display: flex; justify-content: center; gap: 2rem; font-size: 0.82rem; flex-wrap: wrap; margin-top: auto; }
+  footer a { color: #6b6b65; text-decoration: none; }
+  footer a:hover { color: #1e4080; text-decoration: underline; }
+  .footer-sep { display: none; }
 `;
 
 function esc(s: string): string {
@@ -191,7 +192,7 @@ if (IS_GUEST) {
 }
 </script>
 </div>
-${siteFooter(username)}
+${siteFooter()}
 </body>
 </html>`;
 }
@@ -267,17 +268,11 @@ ${navBar(null, isSignup ? "signup" : "login")}
 </html>`;
 }
 
-function siteFooter(username: string | null): string {
-  const resetSection = username
-    ? `<span class="footer-sep">·</span><a href="/account#reset">Reset progress</a>`
-    : `<span class="footer-sep">·</span><a href="#" onclick="if(confirm('Reset all local reading progress?')){localStorage.removeItem('rcw_guest_state');localStorage.removeItem('rcw_guest_last');window.location.href='/';}return false;">Reset progress</a>`;
+function siteFooter(): string {
   return `<footer>
   <a href="/about">About</a>
-  <span class="footer-sep">·</span>
   <a href="https://msws.xyz/s/donate">Donate</a>
-  <span class="footer-sep">·</span>
   <a href="https://git.msws.xyz/MS/RCW">Source</a>
-  ${resetSection}
 </footer>`;
 }
 
@@ -335,7 +330,7 @@ ${navBar(username)}
     <p>The source code is available at <a href="https://git.msws.xyz/MS/RCW" target="_blank" rel="noopener">git.msws.xyz/MS/RCW</a>. If you find it useful, consider <a href="https://msws.xyz/s/donate">donating</a>.</p>
   </div>
 </div>
-${siteFooter(username)}
+${siteFooter()}
 </body>
 </html>`;
 }
@@ -349,68 +344,72 @@ function accountPage(username: string, notice?: string, error?: string): string 
 <title>Account — RCW</title>
 <style>
   ${baseStyle}
-  .page h1 { font-size: 1.3rem; font-weight: 700; margin-bottom: 2rem; color: #1c1c1a; }
-  .section-card { background: #fff; border: 1px solid #e0dbd2; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.25rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-  .section-card h2 { font-size: 0.95rem; font-weight: 700; color: #1c1c1a; margin-bottom: 1.1rem; }
-  .field { margin-bottom: 1rem; }
+  .account-wrap { max-width: 480px; }
+  .account-wrap h1 { font-size: 1.2rem; font-weight: 700; color: #1c1c1a; margin-bottom: 0.25rem; }
+  .account-wrap .subhead { font-size: 0.85rem; color: #6b6b65; margin-bottom: 1.75rem; }
+  .pass-card { background: #fff; border: 1px solid #e0dbd2; border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+  .pass-card label { display: block; font-size: 0.8rem; font-weight: 600; color: #6b6b65; margin-bottom: 0.35rem; letter-spacing: 0.02em; text-transform: uppercase; }
+  .pass-card input[type=password] { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #d0ccc4; border-radius: 6px; font-size: 0.95rem; font-family: inherit; background: #faf9f7; color: #1c1c1a; }
+  .pass-card input[type=password]:focus { outline: none; border-color: #1e4080; box-shadow: 0 0 0 3px rgba(30,64,128,0.12); background: #fff; }
+  .section-card { background: #fff; border: 1px solid #e0dbd2; border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+  .section-card h2 { font-size: 0.9rem; font-weight: 700; color: #1c1c1a; margin-bottom: 1rem; }
+  .section-card p { font-size: 0.85rem; color: #6b6b65; margin-bottom: 0.9rem; line-height: 1.6; }
+  .field { margin-bottom: 0.9rem; }
   .field label { display: block; font-size: 0.8rem; font-weight: 600; color: #6b6b65; margin-bottom: 0.35rem; letter-spacing: 0.02em; text-transform: uppercase; }
-  .field input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #d0ccc4; border-radius: 6px; font-size: 0.95rem; font-family: inherit; background: #faf9f7; color: #1c1c1a; max-width: 360px; }
+  .field input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #d0ccc4; border-radius: 6px; font-size: 0.95rem; font-family: inherit; background: #faf9f7; color: #1c1c1a; }
   .field input:focus { outline: none; border-color: #1e4080; box-shadow: 0 0 0 3px rgba(30,64,128,0.12); background: #fff; }
-  .row-btn { margin-top: 0.25rem; }
   .notice { background: #f0fdf4; border: 1px solid #86efac; color: #166534; font-size: 0.85rem; padding: 0.6rem 0.75rem; border-radius: 6px; margin-bottom: 1.25rem; }
   .error { background: #fff5f5; border: 1px solid #fca5a5; color: #b91c1c; font-size: 0.85rem; padding: 0.6rem 0.75rem; border-radius: 6px; margin-bottom: 1.25rem; }
   .danger-btn { background: #fff; color: #b91c1c; border-color: #fca5a5; }
   .danger-btn:hover { background: #fff5f5; filter: none; }
-  .reset-confirm { display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e0dbd2; }
+  .reset-confirm { display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #e0dbd2; }
 </style>
 </head>
 <body>
 ${navBar(username)}
 <div class="page">
+<div class="account-wrap">
   <h1>Account</h1>
+  <p class="subhead">Signed in as <strong>${esc(username)}</strong></p>
   ${notice ? `<div class="notice">${esc(notice)}</div>` : ""}
   ${error ? `<div class="error">${esc(error)}</div>` : ""}
 
+  <div class="pass-card">
+    <label for="current-password">Current password</label>
+    <input type="password" id="current-password" autocomplete="current-password" placeholder="Required for all changes">
+  </div>
+
   <div class="section-card">
     <h2>Change username</h2>
-    <form method="POST" action="/account/username">
+    <form method="POST" action="/account/username" onsubmit="injectPass(this)">
+      <input type="hidden" name="password">
       <div class="field">
         <label for="new-username">New username</label>
         <input type="text" id="new-username" name="new_username" autocomplete="username" value="${esc(username)}" required>
       </div>
-      <div class="field">
-        <label for="confirm-pass-u">Current password</label>
-        <input type="password" id="confirm-pass-u" name="password" autocomplete="current-password" required>
-      </div>
-      <div class="row-btn"><button class="primary" type="submit">Update username</button></div>
+      <button class="primary" type="submit">Update username</button>
     </form>
   </div>
 
   <div class="section-card">
     <h2>Change password</h2>
-    <form method="POST" action="/account/password">
-      <div class="field">
-        <label for="current-pass">Current password</label>
-        <input type="password" id="current-pass" name="current_password" autocomplete="current-password" required>
-      </div>
+    <form method="POST" action="/account/password" onsubmit="injectPass(this)">
+      <input type="hidden" name="password">
       <div class="field">
         <label for="new-pass">New password</label>
         <input type="password" id="new-pass" name="new_password" autocomplete="new-password" required>
       </div>
-      <div class="row-btn"><button class="primary" type="submit">Update password</button></div>
+      <button class="primary" type="submit">Update password</button>
     </form>
   </div>
 
   <div class="section-card" id="reset">
     <h2>Reset progress</h2>
-    <p style="font-size:0.875rem;color:#6b6b65;margin-bottom:1rem;">This will permanently delete all your reading progress. This cannot be undone.</p>
+    <p>This will permanently delete all your reading progress and cannot be undone.</p>
     <button class="danger-btn" type="button" onclick="document.getElementById('reset-confirm').style.display='block';this.style.display='none'">Reset progress…</button>
     <div class="reset-confirm" id="reset-confirm">
-      <form method="POST" action="/account/reset">
-        <div class="field">
-          <label for="reset-pass">Enter your password to confirm</label>
-          <input type="password" id="reset-pass" name="password" autocomplete="current-password" required autofocus>
-        </div>
+      <form method="POST" action="/account/reset" onsubmit="injectPass(this)">
+        <input type="hidden" name="password">
         <div style="display:flex;gap:0.5rem;">
           <button class="danger-btn" type="submit">Yes, reset all progress</button>
           <button type="button" onclick="document.getElementById('reset-confirm').style.display='none';document.querySelector('.danger-btn').style.display=''">Cancel</button>
@@ -419,7 +418,13 @@ ${navBar(username)}
     </div>
   </div>
 </div>
-${siteFooter(username)}
+</div>
+${siteFooter()}
+<script>
+function injectPass(form) {
+  form.querySelector('input[name="password"]').value = document.getElementById('current-password').value;
+}
+</script>
 </body>
 </html>`;
 }
@@ -590,7 +595,7 @@ async function handle(req: Request): Promise<Response> {
   if (url.pathname === "/account/password" && req.method === "POST") {
     if (!userId || !username) return new Response(null, { status: 302, headers: { "Location": "/login" } });
     const form = new URLSearchParams(await req.text());
-    const currentPass = form.get("current_password") ?? "";
+    const currentPass = form.get("password") ?? "";
     const newPass = form.get("new_password") ?? "";
     const user = db.getUserById(userId)!;
     if (!(await Bun.password.verify(currentPass, user.passwordHash)))
