@@ -40,14 +40,17 @@ function deleteSession(req: Request): void {
 
 const baseStyle = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Georgia, serif; max-width: 960px; margin: 0 auto; padding: 2rem 1rem; color: #1a1a1a; }
-  nav { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; }
-  nav a { color: #226; text-decoration: none; }
-  nav a:hover { text-decoration: underline; }
-  nav .spacer { flex: 1; }
-  nav .nav-user { color: #555; font-size: 0.85rem; }
-  button { padding: 0.4rem 1rem; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; font-size: 0.9rem; }
-  button.primary { background: #2a5; color: #fff; border-color: #2a5; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1c1c1a; font-size: 14px; line-height: 1.5; }
+  .nav { background: #1e4080; padding: 0 1.5rem; display: flex; align-items: center; height: 48px; gap: 1.5rem; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  .nav-brand { font-weight: 700; font-size: 0.95rem; color: white; letter-spacing: 0.02em; }
+  .nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.3rem 0; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+  .nav a:hover { color: white; }
+  .nav a.active { color: white; border-bottom-color: rgba(255,255,255,0.7); }
+  .nav .nav-spacer { flex: 1; }
+  .nav .nav-user { color: rgba(255,255,255,0.7); font-size: 0.85rem; }
+  .page { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem; }
+  button { padding: 0.4rem 1rem; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; font-size: 0.9rem; font-family: inherit; }
+  button.primary { background: #1e4080; color: #fff; border-color: #1e4080; }
   button:hover { filter: brightness(0.93); }
   progress { width: 100%; height: 6px; margin-bottom: 1rem; }
   .meta { font-size: 0.8rem; color: #888; margin-bottom: 1.5rem; }
@@ -57,11 +60,11 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function navBar(username: string | null): string {
+function navBar(username: string | null, active?: string): string {
   const auth = username
     ? `<span class="nav-user">${esc(username)}</span><a href="/logout">Log out</a>`
-    : `<a href="/login">Log in</a><a href="/signup">Sign up</a>`;
-  return `<nav><a href="/">Reader</a><a href="/index">Index</a><span class="spacer"></span>${auth}</nav>`;
+    : `<a href="/login"${active === "login" ? ' class="active"' : ""}>Log in</a><a href="/signup"${active === "signup" ? ' class="active"' : ""}>Sign up</a>`;
+  return `<nav class="nav"><span class="nav-brand">RCW</span><a href="/"${active === "reader" ? ' class="active"' : ""}>Reader</a><a href="/index"${active === "index" ? ' class="active"' : ""}>Index</a><span class="nav-spacer"></span>${auth}</nav>`;
 }
 
 /**
@@ -105,10 +108,10 @@ if (${isGuest} && !location.search.includes('after=')) {
 <style>
   ${baseStyle}
   header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
-  .header-text h1 { font-size: 1rem; color: #555; margin-bottom: 0.25rem; }
-  .header-text h2 { font-size: 1.15rem; color: #1a1a1a; font-weight: 600; }
+  .header-text h1 { font-size: 0.85rem; color: #6b6b65; margin-bottom: 0.25rem; letter-spacing: 0.01em; }
+  .header-text h2 { font-size: 1.1rem; color: #1c1c1a; font-weight: 600; }
   .actions { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
-  pre { white-space: pre-wrap; font-family: Georgia, serif; line-height: 1.7; font-size: 1rem; }
+  pre { white-space: pre-wrap; font-family: Georgia, serif; line-height: 1.7; font-size: 1rem; background: #fff; border: 1px solid #e0dbd2; border-radius: 8px; padding: 1.5rem; }
   a.rcw-ref { color: #226; text-decoration: underline dotted; position: relative; }
   a.rcw-ref[data-tooltip]:hover::after {
     content: attr(data-tooltip);
@@ -123,7 +126,8 @@ if (${isGuest} && !location.search.includes('after=')) {
 </style>
 </head>
 <body>
-${navBar(username)}
+${navBar(username, "reader")}
+<div class="page">
 <header>
   <div class="header-text">
     <h1>RCW ${esc(name)}</h1>
@@ -181,6 +185,7 @@ if (IS_GUEST) {
     gUnread + ' remaining \u00B7 ' + gPct + '% complete';
 }
 </script>
+</div>
 </body>
 </html>`;
 }
@@ -196,9 +201,7 @@ function donePage(_username: string | null): string {
 
 function authPage(title: string, action: string, error?: string): string {
   const isSignup = action === "/signup";
-  const switchLink = isSignup
-    ? `Already have an account? <a href="/login">Log in</a>`
-    : `No account? <a href="/signup">Sign up</a>`;
+  const switchText = isSignup ? "Already have an account? <a href='/login' id='switch-link'>Log in</a>" : "No account? <a href='/signup' id='switch-link'>Sign up</a>";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -207,30 +210,53 @@ function authPage(title: string, action: string, error?: string): string {
 <title>${esc(title)} — RCW</title>
 <style>
   ${baseStyle}
-  .auth-card { max-width: 360px; margin: 4rem auto; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
-  .auth-card h1 { font-size: 1.3rem; margin-bottom: 1.5rem; }
-  label { display: block; font-size: 0.85rem; color: #555; margin-bottom: 0.25rem; }
-  input[type=text], input[type=password] { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; font-family: sans-serif; margin-bottom: 1rem; }
-  input:focus { outline: none; border-color: #226; box-shadow: 0 0 0 3px rgba(34,34,102,0.1); }
-  .error { color: #c00; font-size: 0.85rem; margin-bottom: 1rem; }
-  .auth-footer { margin-top: 1rem; font-size: 0.85rem; color: #555; text-align: center; }
-  button.full { width: 100%; padding: 0.55rem; font-size: 0.95rem; }
+  .auth-wrap { display: flex; justify-content: center; padding: 4rem 1rem; }
+  .auth-card { width: 100%; max-width: 380px; background: #fff; border: 1px solid #e0dbd2; border-radius: 10px; padding: 2rem; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .auth-card h1 { font-size: 1.25rem; font-weight: 700; color: #1c1c1a; margin-bottom: 1.75rem; }
+  .field { margin-bottom: 1.1rem; }
+  .field label { display: block; font-size: 0.8rem; font-weight: 600; color: #6b6b65; margin-bottom: 0.35rem; letter-spacing: 0.02em; text-transform: uppercase; }
+  .field input { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #d0ccc4; border-radius: 6px; font-size: 0.95rem; font-family: inherit; background: #faf9f7; color: #1c1c1a; }
+  .field input:focus { outline: none; border-color: #1e4080; box-shadow: 0 0 0 3px rgba(30,64,128,0.12); background: #fff; }
+  .error { background: #fff5f5; border: 1px solid #fca5a5; color: #b91c1c; font-size: 0.85rem; padding: 0.6rem 0.75rem; border-radius: 6px; margin-bottom: 1.1rem; }
+  .auth-submit { width: 100%; padding: 0.6rem; font-size: 0.95rem; margin-top: 0.5rem; border-radius: 6px; }
+  .auth-footer { margin-top: 1.25rem; font-size: 0.85rem; color: #6b6b65; text-align: center; }
+  .auth-footer a { color: #1e4080; text-decoration: none; font-weight: 500; }
+  .auth-footer a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
-${navBar(null)}
-<div class="auth-card">
-  <h1>${esc(title)}</h1>
-  ${error ? `<p class="error">${esc(error)}</p>` : ""}
-  <form method="POST" action="${action}">
-    <label for="username">Username</label>
-    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password" autocomplete="${isSignup ? "new-password" : "current-password"}" required>
-    <button class="primary full" type="submit">${esc(title)}</button>
-  </form>
-  <p class="auth-footer">${switchLink}</p>
+${navBar(null, isSignup ? "signup" : "login")}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1>${esc(title)}</h1>
+    ${error ? `<div class="error">${esc(error)}</div>` : ""}
+    <form method="POST" action="${action}">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="${isSignup ? "new-password" : "current-password"}" required>
+      </div>
+      <button class="primary auth-submit" type="submit">${esc(title)}</button>
+    </form>
+    <p class="auth-footer">${switchText}</p>
+  </div>
 </div>
+<script>
+// Pre-fill fields from sessionStorage if coming from the other auth page
+(function() {
+  var u = sessionStorage.getItem('auth_u');
+  var p = sessionStorage.getItem('auth_p');
+  if (u) { document.getElementById('username').value = u; sessionStorage.removeItem('auth_u'); }
+  if (p) { document.getElementById('password').value = p; sessionStorage.removeItem('auth_p'); }
+  document.getElementById('switch-link').addEventListener('click', function() {
+    sessionStorage.setItem('auth_u', document.getElementById('username').value);
+    sessionStorage.setItem('auth_p', document.getElementById('password').value);
+  });
+})();
+</script>
 </body>
 </html>`;
 }
