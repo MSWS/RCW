@@ -40,6 +40,7 @@ function deleteSession(req: Request): void {
 
 const baseStyle = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scrollbar-gutter: stable; }
   html, body { height: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1c1c1a; font-size: 14px; line-height: 1.5; display: flex; flex-direction: column; min-height: 100vh; }
   .nav { background: #1e4080; padding: 0 1.5rem; display: flex; align-items: center; height: 48px; gap: 1.5rem; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
