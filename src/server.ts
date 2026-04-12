@@ -1,4 +1,4 @@
-import { RcwDatabase, type SectionRow } from "./database";
+import { RcwDatabase, type SectionRow, sectionNumToId, idToSectionNum } from "./database";
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -115,13 +115,12 @@ function navBar(username: string | null, active?: string): string {
 function linkifyCites(escapedText: string, selfId: string): string {
   return escapedText.replace(
     /\bRCW\s+(\d+[A-Z]?\.\d+[A-Z]?\.\d+[A-Z]?)\b/g,
-    (_match, cite: string) => {
-      const parts = cite.split(".");
-      const id = `${parts[0]}/${parts[0]}.${parts[1]}/${cite}`;
-      if (id === selfId) return `RCW ${cite}`;
+    (_match, num: string) => {
+      const id = sectionNumToId(num);
+      if (id === selfId) return `RCW ${num}`;
       const linked = db.getSection(id);
       const tooltip = linked?.heading ? ` data-tooltip="${esc(linked.heading)}"` : "";
-      return `RCW <a class="rcw-ref" href="/section?cite=${encodeURIComponent(id)}"${tooltip}>${cite}</a>`;
+      return `RCW <a class="rcw-ref" href="/section?cite=${num}"${tooltip}>${num}</a>`;
     }
   );
 }
@@ -130,21 +129,21 @@ function readerPage(section: SectionRow, username: string | null, userId: number
   const s = db.getStats(userId);
   const pct = s.total > 0 ? ((s.read / s.total) * 100).toFixed(1) : "0.0";
   const cite = section.id;
-  const name = cite.split("/").pop()!;
+  const sectionNum = idToSectionNum(cite);
   const isGuest = userId === null;
 
-  const canonicalUrl = `/section?cite=${encodeURIComponent(cite)}`;
-  const ogDescription = section.text.slice(0, 200).replace(/\s+/g, " ").trim();
+  const canonicalUrl = `/section?cite=${sectionNum}`;
+  const ogDescription = section.text.slice(0, 300).replace(/\s+/g, " ").trim();
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RCW ${esc(name)} — ${esc(section.heading)}</title>
+<title>RCW ${esc(sectionNum)} — ${esc(section.heading)}</title>
 <meta name="description" content="${esc(ogDescription)}">
 <meta property="og:type" content="article">
-<meta property="og:title" content="RCW ${esc(name)} — ${esc(section.heading)}">
+<meta property="og:title" content="RCW ${esc(sectionNum)} — ${esc(section.heading)}">
 <meta property="og:description" content="${esc(ogDescription)}">
 <meta property="og:url" content="${esc(canonicalUrl)}">
 <link rel="canonical" href="${esc(canonicalUrl)}">
@@ -185,7 +184,7 @@ ${navBar(username, "reader")}
 <div class="page">
 <header>
   <div class="header-text">
-    <h1><a href="${esc(canonicalUrl)}" id="cite-link" title="Copy link to this section">RCW ${esc(name)}</a></h1>
+    <h1><a href="${esc(canonicalUrl)}" id="cite-link" title="Copy link to this section">RCW ${esc(sectionNum)}</a></h1>
     ${section.heading ? `<h2>${esc(section.heading)}</h2>` : ""}
   </div>
   <div class="actions">
@@ -740,8 +739,10 @@ function showMsg(msg, isError) {
 
   // ── Reader ─────────────────────────────────────────────────────────────────
   if (url.pathname === "/section") {
-    const cite = url.searchParams.get("cite");
-    if (!cite) return new Response("Not found", { status: 404 });
+    const raw = url.searchParams.get("cite");
+    if (!raw) return new Response("Not found", { status: 404 });
+    // Accept both short form "1.04.013" and legacy full form "1/1.04/1.04.013"
+    const cite = raw.includes("/") ? raw : sectionNumToId(raw);
     const section = db.getSection(cite, userId);
     if (!section) return new Response("Not found", { status: 404 });
     db.nextUnread(cite, userId); // warm next

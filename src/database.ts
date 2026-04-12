@@ -4,6 +4,17 @@ import { join } from "path";
 
 export type ReadState = "unread" | "read" | "skipped";
 
+/** "1.04.013" → "1/1.04/1.04.013" */
+export function sectionNumToId(num: string): string {
+    const parts = num.split(".");
+    return `${parts[0]}/${parts[0]}.${parts[1]}/${num}`;
+}
+
+/** "1/1.04/1.04.013" → "1.04.013" */
+export function idToSectionNum(id: string): string {
+    return id.split("/").pop()!;
+}
+
 export interface SectionRow {
     id: string;       // full cite: "1/1.04/1.04.013"
     rcwTitle: string; // "1"

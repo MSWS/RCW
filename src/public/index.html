@@ -1031,7 +1031,7 @@
 
         var link = document.createElement('a');
         link.className = 'search-result-id';
-        link.href = '/section?cite=' + encodeURIComponent(r.id);
+        link.href = '/section?cite=' + r.id.split('/').pop();
         link.textContent = 'RCW ' + name;
 
         var heading = document.createElement('div');
@@ -1245,7 +1245,7 @@
 
         var link = document.createElement('a');
         link.className = 'section-cite';
-        link.href = '/section?cite=' + encodeURIComponent(sec.id);
+        link.href = '/section?cite=' + sec.id.split('/').pop();
         link.textContent = name;
         link.title = sec.id;
         citeWrap.appendChild(link);

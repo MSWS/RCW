@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { RcwDatabase } from "./database";
+import { RcwDatabase, sectionNumToId, idToSectionNum } from "./database";
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -34,6 +34,29 @@ beforeEach(() => {
 afterEach(() => {
   db.close();
   rmSync(fixture, { recursive: true, force: true });
+});
+
+// ── Citation helpers ──────────────────────────────────────────────────────────
+
+describe("sectionNumToId / idToSectionNum", () => {
+  test("sectionNumToId converts short form to full ID", () => {
+    expect(sectionNumToId("1.04.013")).toBe("1/1.04/1.04.013");
+    expect(sectionNumToId("2.04.010")).toBe("2/2.04/2.04.010");
+    expect(sectionNumToId("69.50.401")).toBe("69/69.50/69.50.401");
+  });
+
+  test("idToSectionNum converts full ID to short form", () => {
+    expect(idToSectionNum("1/1.04/1.04.013")).toBe("1.04.013");
+    expect(idToSectionNum("2/2.04/2.04.010")).toBe("2.04.010");
+    expect(idToSectionNum("69/69.50/69.50.401")).toBe("69.50.401");
+  });
+
+  test("round-trips correctly", () => {
+    const ids = ["1/1.04/1.04.013", "2/2.04/2.04.010", "69/69.50/69.50.401"];
+    for (const id of ids) {
+      expect(sectionNumToId(idToSectionNum(id))).toBe(id);
+    }
+  });
 });
 
 // ── Indexing ──────────────────────────────────────────────────────────────────
