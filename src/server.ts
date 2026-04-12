@@ -1,12 +1,12 @@
 import { RcwDatabase, type SectionRow, sectionNumToId, idToSectionNum } from "./database";
 import { execSync } from "child_process";
 
-const GIT_BRANCH = (() => {
+const GIT_BRANCH = process.env.GIT_BRANCH ?? (() => {
   try { return execSync("git rev-parse --abbrev-ref HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
   catch { return "unknown"; }
 })();
 
-const GIT_HASH = (() => {
+const GIT_HASH = process.env.GIT_HASH ?? (() => {
   try { return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
   catch { return "unknown"; }
 })();
@@ -769,7 +769,7 @@ function showMsg(msg, isError) {
     // Inject auth bootstrap so #nav-auth renders synchronously, preventing layout shift.
     const html = await Bun.file(import.meta.dir + "/public/index.html").text();
     const navHtml = username
-      ? `<a href="/account" style="color:rgba(255,255,255,0.8);font-size:0.85rem;text-decoration:none">${esc(username)}</a><a href="/logout">Log out</a>`
+      ? `<a href="/account" class="nav-user">${esc(username)}</a><a href="/logout">Log out</a>`
       : `<a href="/login">Log in</a><a href="/signup">Sign up</a>`;
     const authScript = `<script>IS_GUEST=${!username};(function(){` +
       `var n=document.getElementById('nav-auth');if(n)n.innerHTML=${JSON.stringify(navHtml)};` +

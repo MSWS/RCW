@@ -46,9 +46,12 @@ jobs:
             TAG="dev"
           else
             echo "Not on main or dev, skipping push."
-            docker build .
+            docker build --build-arg GIT_BRANCH=$BRANCH --build-arg GIT_HASH=${{ gitea.sha }} .
             exit 0
           fi
-          docker build -t $IMAGE:${{ gitea.sha }} -t $IMAGE:$TAG .
+          docker build \
+            --build-arg GIT_BRANCH=$BRANCH \
+            --build-arg GIT_HASH=${{ gitea.sha }} \
+            -t $IMAGE:${{ gitea.sha }} -t $IMAGE:$TAG .
           docker push $IMAGE:${{ gitea.sha }}
           docker push $IMAGE:$TAG
