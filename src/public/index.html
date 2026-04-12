@@ -1304,11 +1304,7 @@
       }, 300);
     });
 
-    // ── Auth nav + initial load ────────────────────────────────────────────────
-
-    // IS_GUEST, #nav-auth, and #version are populated by a server-injected
-    // bootstrap script just before </body>. That script calls init() after
-    // setting IS_GUEST so the TOC renders with the correct auth state.
+    // ── Initial load (called by server-injected bootstrap script) ─────────────
     function init() {
       loadStats();
       loadToc();

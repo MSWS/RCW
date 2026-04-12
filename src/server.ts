@@ -777,7 +777,9 @@ function showMsg(msg, isError) {
       `document.getElementById('version').textContent=${JSON.stringify(`${GIT_BRANCH} @ ${GIT_HASH}`)};` +
       `init();` +
       `</script>`;
-    return htmlResp(html.replace("</body>", `${authScript}</body>`));
+    const insertAt = html.lastIndexOf("</body>");
+    const injected = html.slice(0, insertAt) + authScript + html.slice(insertAt);
+    return htmlResp(injected);
   }
 
   if (url.pathname === "/") {
