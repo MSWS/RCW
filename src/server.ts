@@ -133,12 +133,21 @@ function readerPage(section: SectionRow, username: string | null, userId: number
   const name = cite.split("/").pop()!;
   const isGuest = userId === null;
 
+  const canonicalUrl = `/section?cite=${encodeURIComponent(cite)}`;
+  const ogDescription = section.text.slice(0, 200).replace(/\s+/g, " ").trim();
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RCW ${esc(name)}</title>
+<title>RCW ${esc(name)} — ${esc(section.heading)}</title>
+<meta name="description" content="${esc(ogDescription)}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="RCW ${esc(name)} — ${esc(section.heading)}">
+<meta property="og:description" content="${esc(ogDescription)}">
+<meta property="og:url" content="${esc(canonicalUrl)}">
+<link rel="canonical" href="${esc(canonicalUrl)}">
 <script>
 // Resume guest position before any content renders (avoids flash)
 if (${isGuest} && !location.search.includes('after=')) {
@@ -150,6 +159,8 @@ if (${isGuest} && !location.search.includes('after=')) {
   ${baseStyle}
   header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
   .header-text h1 { font-size: 0.85rem; color: #6b6b65; margin-bottom: 0.25rem; letter-spacing: 0.01em; }
+  .header-text h1 a { color: inherit; text-decoration: none; border-radius: 3px; padding: 0 2px; margin: 0 -2px; transition: background 0.15s, color 0.15s; }
+  .header-text h1 a:hover { color: #1e4080; background: #edf1f9; }
   .header-text h2 { font-size: 1.1rem; color: #1c1c1a; font-weight: 600; }
   .actions { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
   pre { white-space: pre-wrap; font-family: Georgia, serif; line-height: 1.7; font-size: 1rem; background: #fff; border: 1px solid #e0dbd2; border-radius: 8px; padding: 1.5rem; }
@@ -164,14 +175,17 @@ if (${isGuest} && !location.search.includes('after=')) {
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     pointer-events: none; z-index: 10;
   }
+  #copy-toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(0.5rem); background: #1a1a1a; color: #fff; padding: 0.4rem 0.9rem; border-radius: 6px; font-size: 0.8rem; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; z-index: 50; }
+  #copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
 ${navBar(username, "reader")}
+<div id="copy-toast">Link copied</div>
 <div class="page">
 <header>
   <div class="header-text">
-    <h1>RCW ${esc(name)}</h1>
+    <h1><a href="${esc(canonicalUrl)}" id="cite-link" title="Copy link to this section">RCW ${esc(name)}</a></h1>
     ${section.heading ? `<h2>${esc(section.heading)}</h2>` : ""}
   </div>
   <div class="actions">
@@ -205,6 +219,33 @@ async function act(action) {
     body: JSON.stringify({ state: action === 'read' ? 'read' : 'skipped' })
   });
   window.location.href = '/';
+}
+
+// Canonical URL for this section — used for copying regardless of what
+// history.replaceState does to the address bar below.
+var CANONICAL = ${JSON.stringify(canonicalUrl)};
+
+// Copy-link on cite click
+document.getElementById('cite-link').addEventListener('click', function (e) {
+  e.preventDefault();
+  var full = location.origin + CANONICAL;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(full).then(showCopyToast);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = full;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showCopyToast();
+  }
+});
+
+function showCopyToast() {
+  var t = document.getElementById('copy-toast');
+  t.classList.add('show');
+  setTimeout(function () { t.classList.remove('show'); }, 1800);
 }
 
 // Clean up ?after= from URL bar without reloading
