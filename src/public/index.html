@@ -1306,11 +1306,13 @@
 
     // ── Auth nav + initial load ────────────────────────────────────────────────
 
-    // IS_GUEST and #nav-auth are pre-populated by a server-injected bootstrap
-    // script, so the nav renders synchronously without a layout shift.
-    // We still call loadStats/loadToc directly; the /api/me fetch is skipped.
-    loadStats();
-    loadToc();
+    // IS_GUEST, #nav-auth, and #version are populated by a server-injected
+    // bootstrap script just before </body>. That script calls init() after
+    // setting IS_GUEST so the TOC renders with the correct auth state.
+    function init() {
+      loadStats();
+      loadToc();
+    }
   </script>
 <footer style="border-top:1px solid #e0dbd2;padding:1.25rem 1rem;display:flex;justify-content:center;gap:2rem;font-size:0.82rem;flex-wrap:wrap;margin-top:auto">
   <a href="/about" style="color:#6b6b65;text-decoration:none">About</a>

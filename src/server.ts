@@ -771,11 +771,13 @@ function showMsg(msg, isError) {
     const navHtml = username
       ? `<a href="/account" class="nav-user">${esc(username)}</a><a href="/logout">Log out</a>`
       : `<a href="/login">Log in</a><a href="/signup">Sign up</a>`;
-    const authScript = `<script>IS_GUEST=${!username};(function(){` +
-      `var n=document.getElementById('nav-auth');if(n)n.innerHTML=${JSON.stringify(navHtml)};` +
-      `var v=document.getElementById('version');if(v)v.textContent=${JSON.stringify(`${GIT_BRANCH} @ ${GIT_HASH}`)};` +
-      `}());</script>`;
-    return htmlResp(html.replace("<body>", `<body>${authScript}`));
+    const authScript = `<script>` +
+      `IS_GUEST=${!username};` +
+      `document.getElementById('nav-auth').innerHTML=${JSON.stringify(navHtml)};` +
+      `document.getElementById('version').textContent=${JSON.stringify(`${GIT_BRANCH} @ ${GIT_HASH}`)};` +
+      `init();` +
+      `</script>`;
+    return htmlResp(html.replace("</body>", `${authScript}</body>`));
   }
 
   if (url.pathname === "/") {
