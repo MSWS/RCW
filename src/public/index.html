@@ -1294,29 +1294,19 @@
       }, 300);
     });
 
-    // ── Auth nav ───────────────────────────────────────────────────────────────
+    // ── Auth nav + initial load ────────────────────────────────────────────────
 
-    // Resolve auth state first so IS_GUEST is correct before any rendering
-    fetch('/api/me').then(function (r) {
-      var el = document.getElementById('nav-auth');
-      IS_GUEST = !r.ok;
-      if (r.ok) {
-        r.json().then(function (me) {
-          el.innerHTML =
-            '<a href="/account" style="color:rgba(255,255,255,0.8);font-size:0.85rem;text-decoration:none">' + me.username + '</a>' +
-            '<a href="/logout">Log out</a>';
-        });
-      } else {
-        el.innerHTML = '<a href="/login">Log in</a><a href="/signup">Sign up</a>';
-      }
-      loadStats();
-      loadToc();
-    });
+    // IS_GUEST and #nav-auth are pre-populated by a server-injected bootstrap
+    // script, so the nav renders synchronously without a layout shift.
+    // We still call loadStats/loadToc directly; the /api/me fetch is skipped.
+    loadStats();
+    loadToc();
   </script>
 <footer style="border-top:1px solid #e0dbd2;padding:1.25rem 1rem;display:flex;justify-content:center;gap:2rem;font-size:0.82rem;flex-wrap:wrap;margin-top:auto">
   <a href="/about" style="color:#6b6b65;text-decoration:none">About</a>
   <a href="https://msws.xyz/s/donate" style="color:#6b6b65;text-decoration:none">Donate</a>
   <a href="https://git.msws.xyz/MS/RCW" style="color:#6b6b65;text-decoration:none">Source</a>
+  <span id="version" style="color:#9c9c96;font-size:0.75rem"></span>
 </footer>
 </body>
 

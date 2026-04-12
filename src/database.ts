@@ -477,6 +477,23 @@ export class RcwDatabase {
         }
     }
 
+    getAboutStats(): { sections: number; titles: number; chapters: number; words: number } {
+        const row = this.db.prepare(`
+            SELECT
+                COUNT(*)           AS sections,
+                COUNT(DISTINCT rcw_title) AS titles,
+                COUNT(DISTINCT chapter)   AS chapters,
+                SUM(LENGTH(text) - LENGTH(REPLACE(text, ' ', '')) + 1) AS words
+            FROM sections
+        `).get() as any;
+        return {
+            sections: row.sections,
+            titles:   row.titles,
+            chapters: row.chapters,
+            words:    row.words ?? 0,
+        };
+    }
+
     getStats(userId: number | null): { total: number; read: number; skipped: number; unread: number } {
         if (userId === null) {
             const row = this.db.prepare("SELECT COUNT(*) as total FROM sections").get() as any;

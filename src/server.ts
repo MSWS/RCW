@@ -1,4 +1,15 @@
 import { RcwDatabase, type SectionRow, sectionNumToId, idToSectionNum } from "./database";
+import { execSync } from "child_process";
+
+const GIT_BRANCH = (() => {
+  try { return execSync("git rev-parse --abbrev-ref HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
+  catch { return "unknown"; }
+})();
+
+const GIT_HASH = (() => {
+  try { return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
+  catch { return "unknown"; }
+})();
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -348,11 +359,12 @@ function siteFooter(): string {
   <a href="/about">About</a>
   <a href="https://msws.xyz/s/donate">Donate</a>
   <a href="https://git.msws.xyz/MS/RCW">Source</a>
+  <span style="color:#9c9c96;font-size:0.75rem">${esc(GIT_BRANCH)} @ ${esc(GIT_HASH)}</span>
 </footer>`;
 }
 
 function aboutPage(username: string | null): string {
-  const s = db.getStats(null);
+  const a = db.getAboutStats();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -368,9 +380,10 @@ function aboutPage(username: string | null): string {
   .about-card p { font-size: 0.9rem; color: #3a3a38; line-height: 1.7; margin-bottom: 0.6rem; }
   .about-card p:last-child { margin-bottom: 0; }
   .about-card a { color: #1e4080; }
-  .stat-highlight { display: inline-flex; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
-  .stat-highlight span { font-size: 0.85rem; color: #6b6b65; }
-  .stat-highlight strong { color: #1c1c1a; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
+  .stat-box { background: #f5f4f0; border-radius: 8px; padding: 0.75rem 1rem; }
+  .stat-box .val { font-size: 1.25rem; font-weight: 700; color: #1e4080; display: block; }
+  .stat-box .lbl { font-size: 0.75rem; color: #6b6b65; margin-top: 0.1rem; display: block; }
 </style>
 </head>
 <body>
@@ -383,8 +396,11 @@ ${navBar(username)}
     <h2>What is this?</h2>
     <p>RCW Reader is a tool for reading through the <strong>Revised Code of Washington</strong> — the body of state law that governs Washington State. The RCW contains thousands of individual statutes organized into titles and chapters.</p>
     <p>This site lets you read through every section at your own pace, tracking what you've read, skipping sections you don't need, and picking up right where you left off.</p>
-    <div class="stat-highlight">
-      <span><strong>${s.total.toLocaleString()}</strong> sections indexed</span>
+    <div class="stat-grid">
+      <div class="stat-box"><span class="val">${a.titles.toLocaleString()}</span><span class="lbl">titles</span></div>
+      <div class="stat-box"><span class="val">${a.chapters.toLocaleString()}</span><span class="lbl">chapters</span></div>
+      <div class="stat-box"><span class="val">${a.sections.toLocaleString()}</span><span class="lbl">sections</span></div>
+      <div class="stat-box"><span class="val">${(a.words / 1_000_000).toFixed(1)}M</span><span class="lbl">words</span></div>
     </div>
   </div>
 
@@ -750,7 +766,16 @@ function showMsg(msg, isError) {
   }
 
   if (url.pathname === "/index") {
-    return new Response(Bun.file(import.meta.dir + "/public/index.html"));
+    // Inject auth bootstrap so #nav-auth renders synchronously, preventing layout shift.
+    const html = await Bun.file(import.meta.dir + "/public/index.html").text();
+    const navHtml = username
+      ? `<a href="/account" style="color:rgba(255,255,255,0.8);font-size:0.85rem;text-decoration:none">${esc(username)}</a><a href="/logout">Log out</a>`
+      : `<a href="/login">Log in</a><a href="/signup">Sign up</a>`;
+    const authScript = `<script>IS_GUEST=${!username};(function(){` +
+      `var n=document.getElementById('nav-auth');if(n)n.innerHTML=${JSON.stringify(navHtml)};` +
+      `var v=document.getElementById('version');if(v)v.textContent=${JSON.stringify(`${GIT_BRANCH} @ ${GIT_HASH}`)};` +
+      `}());</script>`;
+    return htmlResp(html.replace("<body>", `<body>${authScript}`));
   }
 
   if (url.pathname === "/") {
